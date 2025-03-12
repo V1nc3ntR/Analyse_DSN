@@ -52,6 +52,19 @@ const DSNModels = (function() {
         niveauDiplome: ""             // S21.G00.30.028 - Niveau de diplôme
       },
       
+      // NOUVEAUTÉ: Carrière et évolution professionnelle
+      carriere: {
+        dateEntree: null,             // Date d'entrée dans l'entreprise
+        fonctionActuelle: "",         // Fonction ou poste actuel
+        categorieCSP: "",             // Catégorie socio-professionnelle
+        niveauHierarchique: "",       // Niveau dans la hiérarchie
+        estCadre: false,              // Statut cadre
+        promotions: [],               // Historique des promotions
+        congesMaternite: [],          // Historique des congés maternité
+        autrementRetourConge: [],     // Historique des retours de congés maternité/paternité/adoption
+        evolutionsSalariales: []      // Historique des évolutions salariales
+      },
+      
       // Agrégats et données calculées
       analytics: {
         age: null,                    // Calculé à partir de la date de naissance
@@ -69,6 +82,25 @@ const DSNModels = (function() {
             maternite: 0,
             accident: 0,
             autres: 0
+          }
+        },
+        // NOUVEAUTÉ: Indicateurs Index Égalité Professionnelle
+        indexEgalite: {
+          augmentation: {
+            historique: [],           // Historique des augmentations
+            derniere: null,           // Date de la dernière augmentation
+            tauxAugmentation: null,   // Taux de la dernière augmentation
+            apresCongeMaternite: null // Augmentation après congé maternité (oui/non)
+          },
+          promotion: {
+            historique: [],           // Historique des promotions
+            derniere: null,           // Date de la dernière promotion
+            estPromu: false           // Indicateur si promu sur la période
+          },
+          niveauRemuneration: {
+            classement: null,         // Classement salarial dans l'entreprise
+            estParmiLes10Plus: false, // Fait partie des 10 plus hautes rémunérations
+            quartile: null            // Quartile de rémunération (1, 2, 3 ou 4)
           }
         }
       },
@@ -129,6 +161,16 @@ const DSNModels = (function() {
         coefficient: ""               // S21.G00.40.050 - Coefficient
       },
       
+      // NOUVEAUTÉ: Classification détaillée pour l'index d'égalité
+      classificationEgalite: {
+        categoriePoste: "",           // Catégorie de poste (Ouvriers, Employés, TAM, Cadres)
+        niveau: "",                   // Niveau dans la catégorie
+        coefficientHierarchique: "",  // Coefficient hiérarchique
+        niveauResponsabilite: "",     // Niveau de responsabilité
+        fonctionEncadrement: false,   // Fonction d'encadrement
+        nombreSubordonnes: 0          // Nombre de personnes encadrées
+      },
+      
       // Lieu de travail
       lieuTravail: {
         identifiant: "",              // S21.G00.40.019 - Identifiant du lieu de travail
@@ -166,6 +208,26 @@ const DSNModels = (function() {
       
       // Historique des rémunérations
       remunerations: [],
+      
+      // NOUVEAUTÉ: Évolution de la rémunération pour l'index d'égalité
+      evolutionRemuneration: {
+        remunerationInitiale: null,      // Rémunération à la signature du contrat
+        remunerationActuelle: null,      // Rémunération actuelle
+        historiqueAugmentations: [],     // Historique des augmentations
+        pourcentageEvolution: null,      // Évolution en % depuis la signature
+        augmentationDerniereAnnee: null, // Montant de l'augmentation sur la dernière année
+        tauxAugmentation: null           // Taux d'augmentation sur la dernière année
+      },
+      
+      // NOUVEAUTÉ: Suivi de carrière pour l'index d'égalité
+      evolutionCarriere: {
+        posteInitial: "",               // Poste à la signature du contrat
+        posteActuel: "",                // Poste actuel
+        historiquePromotions: [],       // Historique des promotions
+        estPromuDerniereAnnee: false,   // Promu dans les 12 derniers mois
+        niveauInitial: "",              // Niveau hiérarchique initial
+        niveauActuel: ""                // Niveau hiérarchique actuel
+      },
       
       // Historique des arrêts de travail liés à ce contrat
       arretsLies: [],
@@ -205,7 +267,17 @@ const DSNModels = (function() {
       montant: null,                  // S21.G00.51.013 - Montant
       tauxRemuneration: null,         // S21.G00.51.014 - Taux de rémunération
       nbHeures: null,                 // S21.G00.51.012 - Nombre d'heures
-      uniteMesure: ""                 // S21.G00.51.015 - Unité de mesure
+      uniteMesure: "",                // S21.G00.51.015 - Unité de mesure
+      
+      // NOUVEAUTÉ: Indicateurs pour l'analyse de l'index d'égalité
+      indexEgalite: {
+        estAugmentation: false,        // Indique s'il s'agit d'une augmentation
+        tauxAugmentation: null,        // Taux d'augmentation en %
+        montantAugmentation: null,     // Montant de l'augmentation
+        lieePromotion: false,          // Liée à une promotion
+        apresRetourCongeMaternite: false, // Après un retour de congé maternité
+        retroactive: false             // Augmentation rétroactive
+      }
     };
   }
   
@@ -226,6 +298,16 @@ const DSNModels = (function() {
         debut: null,                  // S21.G00.60.004 - Date début subrogation
         fin: null,                    // S21.G00.60.005 - Date fin subrogation
         montant: null                 // S21.G00.60.007 - Montant de la subrogation
+      },
+      
+      // NOUVEAUTÉ: Suivi pour l'index égalité
+      suiviEgalite: {
+        estCongeMaternite: false,     // S'agit-il d'un congé maternité
+        estCongePaternite: false,     // S'agit-il d'un congé paternité
+        estCongeAdoption: false,      // S'agit-il d'un congé d'adoption
+        augmentationAuRetour: null,   // Y a-t-il eu une augmentation au retour
+        dateAugmentation: null,       // Date de l'augmentation après retour
+        montantAugmentation: null     // Montant de l'augmentation après retour
       }
     };
   }
@@ -310,6 +392,16 @@ const DSNModels = (function() {
         differencePourcentage: null   // Différence en pourcentage
       },
       
+      // NOUVEAUTÉ: Indicateurs pour l'index d'égalité
+      indexEgalite: {
+        estPromotion: false,          // S'agit-il d'une promotion
+        estAugmentation: false,       // S'agit-il d'une augmentation
+        tauxAugmentation: null,       // Taux d'augmentation si applicable
+        apresCongeMaternite: false,   // Événement après un congé maternité
+        nouveauNiveau: "",            // Nouveau niveau hiérarchique si promotion
+        ancienNiveau: ""              // Ancien niveau hiérarchique si promotion
+      },
+      
       // Métadonnées pour l'analyse
       metadata: {
         source: "",                   // Source de l'événement (DSN, SIRH, etc.)
@@ -321,12 +413,106 @@ const DSNModels = (function() {
     };
   }
   
+  /**
+   * NOUVEAUTÉ: Modèle de données pour l'index d'égalité professionnelle
+   * @returns {Object} Modèle d'index d'égalité
+   */
+  function createIndexEgaliteModel() {
+    return {
+      // Informations générales
+      metadata: {
+        dateCalcul: new Date(),           // Date du calcul
+        periodeReference: {               // Période de référence
+          debut: null,
+          fin: null
+        },
+        effectifTotal: 0,                 // Effectif total pris en compte
+        effectifHommes: 0,                // Nombre d'hommes
+        effectifFemmes: 0,                // Nombre de femmes
+        repartitionCategories: {}         // Répartition par catégorie professionnelle
+      },
+      
+      // Indicateur 1: Écart de rémunération (40 points)
+      indicateur1: {
+        score: null,                      // Score sur 40 points
+        ecartGlobal: null,                // Écart global pondéré
+        ecartRemuneration: null,          // Écart de rémunération entre hommes et femmes (%)
+        parCategorie: [],                 // Écarts par catégorie d'âge et CSP
+        tauxSexesCompares: 0,             // Taux de groupes de salaires comparables
+        populationComparable: 0,          // Nombre de salariés dans les groupes comparables
+        nonCalculable: false,             // Indicateur non calculable
+        motifNonCalculable: ""            // Motif si non calculable
+      },
+      
+      // Indicateur 2: Écart de taux d'augmentations (20 points)
+      indicateur2: {
+        score: null,                      // Score sur 20 points
+        tauxAugmentationHommes: null,     // Taux d'augmentation chez les hommes (%)
+        tauxAugmentationFemmes: null,     // Taux d'augmentation chez les femmes (%)
+        ecartTauxAugmentation: null,      // Écart entre les taux d'augmentation (points de %)
+        nombreHommes: 0,                  // Nombre d'hommes considérés
+        nombreFemmes: 0,                  // Nombre de femmes considérées
+        nombreAugmentesHommes: 0,         // Nombre d'hommes augmentés
+        nombreAugmenteesFemmes: 0,        // Nombre de femmes augmentées
+        nonCalculable: false,             // Indicateur non calculable
+        motifNonCalculable: ""            // Motif si non calculable
+      },
+      
+      // Indicateur 3: Écart de taux de promotions (15 points)
+      indicateur3: {
+        score: null,                      // Score sur 15 points
+        tauxPromotionHommes: null,        // Taux de promotion chez les hommes (%)
+        tauxPromotionFemmes: null,        // Taux de promotion chez les femmes (%)
+        ecartTauxPromotion: null,         // Écart entre les taux de promotion (points de %)
+        nombreHommes: 0,                  // Nombre d'hommes considérés
+        nombreFemmes: 0,                  // Nombre de femmes considérées
+        nombrePromusHommes: 0,            // Nombre d'hommes promus
+        nombrePromuesFemmes: 0,           // Nombre de femmes promues
+        nonCalculable: false,             // Indicateur non calculable
+        motifNonCalculable: ""            // Motif si non calculable
+      },
+      
+      // Indicateur 4: Retour de congé maternité (15 points)
+      indicateur4: {
+        score: null,                      // Score sur 15 points
+        nombreRetourCongeMaternite: 0,    // Nombre de retours de congé maternité
+        nombreAugmentees: 0,              // Nombre de femmes augmentées au retour
+        tauxRespect: null,                // Taux de respect de l'obligation légale (%)
+        nonCalculable: false,             // Indicateur non calculable
+        motifNonCalculable: ""            // Motif si non calculable
+      },
+      
+      // Indicateur 5: Nombre de femmes dans les 10 plus hautes rémunérations (10 points)
+      indicateur5: {
+        score: null,                      // Score sur 10 points
+        nombreFemmesPlusHautesRemunerations: 0, // Nombre de femmes dans les 10 plus hautes rémunérations
+        nombreHommesPlusHautesRemunerations: 0,  // Nombre d'hommes dans les 10 plus hautes rémunérations
+        nonCalculable: false,             // Indicateur non calculable
+        motifNonCalculable: ""            // Motif si non calculable
+      },
+      
+      // Indice global
+      resultat: {
+        total: null,                      // Score total sur 100
+        totalCalculable: null,            // Score maximal calculable
+        indicateurCalculables: 0,         // Nombre d'indicateurs calculables
+        publication: {                   // Informations pour la publication
+          date: null,                    // Date de publication
+          methodologie: "",              // Commentaire sur la méthodologie
+          mesuresCorrection: "",         // Mesures de correction prévues
+          objectifsProgression: ""       // Objectifs de progression
+        }
+      }
+    };
+  }
+  
   // Méthodes à exposer publiquement
   return {
     createSalarieModel,
     createContratModel,
     createRemunerationModel,
     createArretTravailModel,
-    createEvenementContratModel
+    createEvenementContratModel,
+    createIndexEgaliteModel // NOUVEAUTÉ: Fonction pour le modèle d'index d'égalité
   };
 })();
