@@ -201,6 +201,22 @@
                       </div>
                     </div>
                   </div>
+                  
+                  <!-- Nouveau : Sélection du format DSN -->
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label>Format DSN :</label>
+                        <select name="format" class="form-control">
+                          <option value="standard" selected>Format standard</option>
+                          <option value="2025">Format DSN 2025</option>
+                        </select>
+                        <small class="form-text text-muted">
+                          Sélectionnez le format de DSN utilisé
+                        </small>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
                 <!-- Bouton de soumission -->
@@ -241,6 +257,18 @@
                         Veuillez sélectionner au moins un fichier DSN
                       </div>
                     </div>
+                  </div>
+                  
+                  <!-- Nouveau : Sélection du format DSN pour l'import local -->
+                  <div class="form-group">
+                    <label>Format DSN :</label>
+                    <select name="localFormat" class="form-control">
+                      <option value="standard" selected>Format standard</option>
+                      <option value="2025">Format DSN 2025</option>
+                    </select>
+                    <small class="form-text text-muted">
+                      Sélectionnez le format de DSN utilisé
+                    </small>
                   </div>
                   
                   <div id="selectedFiles" class="mt-3">
@@ -305,6 +333,47 @@
                   </div>
                 </div>
                 
+                <!-- Nouveau : Section de paramètres de format DSN -->
+                <div class="form-section">
+                  <div class="form-section-title">
+                    <i class="fas fa-file-alt"></i> Options de format DSN
+                  </div>
+                  
+                  <div class="form-group">
+                    <label>Format DSN par défaut :</label>
+                    <select name="defaultFormat" class="form-control" id="defaultFormat">
+                      <option value="standard" selected>Format standard</option>
+                      <option value="2025">Format DSN 2025</option>
+                    </select>
+                    <small class="form-text text-muted">
+                      Format DSN utilisé par défaut pour l'import
+                    </small>
+                  </div>
+                  
+                  <!-- Options spécifiques au format 2025 -->
+                  <div id="format2025Options" style="display:none;">
+                    <div class="form-group">
+                      <div class="custom-control custom-switch">
+                        <input type="checkbox" class="custom-control-input" id="enableAdvanced2025" name="enableAdvanced2025">
+                        <label class="custom-control-label" for="enableAdvanced2025">Activer les fonctionnalités avancées 2025</label>
+                      </div>
+                      <small class="form-text text-muted">
+                        Active les fonctionnalités spécifiques au format 2025
+                      </small>
+                    </div>
+                    
+                    <div class="form-group">
+                      <div class="custom-control custom-switch">
+                        <input type="checkbox" class="custom-control-input" id="backwardCompatibility" name="backwardCompatibility" checked>
+                        <label class="custom-control-label" for="backwardCompatibility">Compatibilité ascendante</label>
+                      </div>
+                      <small class="form-text text-muted">
+                        Permet également de traiter les DSN dans l'ancien format
+                      </small>
+                    </div>
+                  </div>
+                </div>
+                
                 <div class="form-section">
                   <div class="form-section-title">
                     <i class="fas fa-chart-line"></i> Options d'analyse
@@ -326,6 +395,15 @@
                     </div>
                     <small class="form-text text-muted">
                       Met en évidence les variations significatives de salaire.
+                    </small>
+                  </div>
+                  
+                  <!-- Nouveau : Seuil de détection des anomalies -->
+                  <div class="form-group">
+                    <label>Seuil de détection des anomalies (%) :</label>
+                    <input type="number" class="form-control" name="anomalyThreshold" value="15" min="5" max="50">
+                    <small class="form-text text-muted">
+                      Pourcentage de variation à partir duquel une différence de salaire est considérée comme une anomalie
                     </small>
                   </div>
                 </div>
@@ -422,6 +500,9 @@
         
         // Sauvegarde des paramètres
         document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+        
+        // Gestion des options de format DSN
+        document.getElementById('defaultFormat').addEventListener('change', toggleFormat2025Options);
       }
       
       // Affiche/masque le mot de passe
@@ -437,6 +518,18 @@
           pwd.type = "password";
           icon.classList.remove("fa-eye-slash");
           icon.classList.add("fa-eye");
+        }
+      }
+      
+      // Affiche/masque les options spécifiques au format 2025
+      function toggleFormat2025Options() {
+        const formatSelect = document.getElementById('defaultFormat');
+        const format2025Options = document.getElementById('format2025Options');
+        
+        if (formatSelect.value === '2025') {
+          format2025Options.style.display = 'block';
+        } else {
+          format2025Options.style.display = 'none';
         }
       }
       
@@ -479,6 +572,9 @@
         const form = document.getElementById("apiForm");
         const settings = getSettings();
         
+        // Ajouter le format sélectionné aux paramètres
+        settings.format = form.format.value;
+        
         const formData = {
           apiIdentifiant: form.apiIdentifiant.value.trim(),
           apiMotDePasse: form.apiMotDePasse.value.trim(),
@@ -502,7 +598,12 @@
         resetResults();
         showProgress();
         
+        const form = document.getElementById("localForm");
         const settings = getSettings();
+        
+        // Ajouter le format sélectionné aux paramètres
+        settings.format = form.localFormat.value;
+        
         updateProgress(10, "Lecture des fichiers...");
         
         lireFichiersLocal().then(allTexts => {
@@ -659,13 +760,21 @@
           cacheEnabled: document.getElementById('cacheEnabled').checked,
           overwriteData: document.getElementById('overwriteData').checked,
           remuMethod: document.querySelector('select[name="remuMethod"]').value,
-          detectAnomaly: document.getElementById('detectAnomaly').checked
+          detectAnomaly: document.getElementById('detectAnomaly').checked,
+          defaultFormat: document.querySelector('select[name="defaultFormat"]').value,
+          enableAdvanced2025: document.getElementById('enableAdvanced2025')?.checked || false,
+          backwardCompatibility: document.getElementById('backwardCompatibility')?.checked || true,
+          anomalyThreshold: parseInt(document.querySelector('input[name="anomalyThreshold"]').value || "15")
         };
       }
       
       function saveSettings() {
         const settings = getSettings();
         localStorage.setItem('dsnAnalyzerSettings', JSON.stringify(settings));
+        
+        // Mettre à jour les sélecteurs de format avec le format par défaut
+        document.querySelector('select[name="format"]').value = settings.defaultFormat;
+        document.querySelector('select[name="localFormat"]').value = settings.defaultFormat;
         
         // Affichage d'un message de confirmation
         document.getElementById("resultat").innerHTML = 
@@ -690,6 +799,19 @@
             document.getElementById('overwriteData').checked = settings.overwriteData === true;
             document.querySelector('select[name="remuMethod"]').value = settings.remuMethod || 'v1';
             document.getElementById('detectAnomaly').checked = settings.detectAnomaly !== false;
+            
+            // Nouvelles options
+            document.querySelector('select[name="defaultFormat"]').value = settings.defaultFormat || 'standard';
+            document.getElementById('enableAdvanced2025').checked = settings.enableAdvanced2025 === true;
+            document.getElementById('backwardCompatibility').checked = settings.backwardCompatibility !== false;
+            document.querySelector('input[name="anomalyThreshold"]').value = settings.anomalyThreshold || 15;
+            
+            // Mettre à jour les sélecteurs de format avec le format par défaut
+            document.querySelector('select[name="format"]').value = settings.defaultFormat || 'standard';
+            document.querySelector('select[name="localFormat"]').value = settings.defaultFormat || 'standard';
+            
+            // Mettre à jour l'affichage des options de format 2025
+            toggleFormat2025Options();
           } catch (e) {
             console.error("Erreur lors du chargement des paramètres:", e);
           }
