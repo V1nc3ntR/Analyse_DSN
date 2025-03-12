@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <!-- Font Awesome & Bootstrap -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/4.6.0/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/4.6.0/js/bootstrap.bundle.min.js"></script>
+    <?!= include('SingleFormStyles'); ?>
+  </head>
+  <body>
+    <div class="container mt-4 mb-4">
+      <div class="card">
+        <div class="card-header">
+          <div class="header-title d-flex justify-content-center align-items-center">
+            <i class="fas fa-file-export mr-3" style="font-size: 1.2em;"></i>
+            DSN : Récupération & Analyse
+          </div>
+          <div class="header-subtitle">
+            <i class="fas fa-cloud-download-alt mr-1"></i>
+            DSN via API (TXT) ou Import local
+          </div>
+        </div>
+        
+        <!-- Onglets pour différents modes d'import -->
+        <ul class="nav nav-tabs mt-2" id="importTabs" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" id="api-tab" data-toggle="tab" href="#apiTab" role="tab">
+              <i class="fas fa-cloud-download-alt"></i> Import API
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="local-tab" data-toggle="tab" href="#localTab" role="tab">
+              <i class="fas fa-file-upload"></i> Import Local
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="settings-tab" data-toggle="tab" href="#settingsTab" role="tab">
+              <i class="fas fa-cogs"></i> Paramètres
+            </a>
+          </li>
+        </ul>
+        
+        <div class="card-body">
+          <div class="tab-content" id="importTabContent">
+            <!-- Tab Import API -->
+            <div class="tab-pane fade show active" id="apiTab" role="tabpanel">
+              <form id="apiForm" class="needs-validation" novalidate>
+                <!-- Section API -->
+                <div class="form-section">
+                  <div class="form-section-title">
+                    <i class="fas fa-key"></i> Informations d'API
+                  </div>
+                  
+                  <div class="row">
+                    <div class="col-md-6">
+                      <!-- Identifiant API -->
+                      <div class="form-group">
+                        <label for="apiIdentifiant">Identifiant API :</label>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">
+                              <i class="fas fa-user"></i>
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            id="apiIdentifiant"
+                            name="apiIdentifiant"
+                            class="form-control"
+                            placeholder="Votre identifiant API"
+                            required
+                          >
+                          <div class="invalid-feedback">
+                            L'identifiant API est requis
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <!-- Mot de passe API -->
+                      <div class="form-group">
+                        <label for="apiMotDePasse">Mot de passe API :</label>
+                        <div class="input-group password-container">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">
+                              <i class="fas fa-lock"></i>
+                            </span>
+                          </div>
+                          <input
+                            type="password"
+                            id="apiMotDePasse"
+                            name="apiMotDePasse"
+                            class="form-control"
+                            placeholder="Votre mot de passe API"
+                            required
+                          >
+                          <div class="input-group-append">
+                            <span class="input-group-text toggle-visibility"
+                                  onclick="togglePassword()"
+                                  title="Afficher / masquer">
+                              <i class="fas fa-eye"></i>
+                            </span>
+                          </div>
+                          <div class="invalid-feedback">
+                            Le mot de passe API est requis
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section Paramètres de Recherche -->
+                <div class="form-section">
+                  <div class="form-section-title">
+                    <i class="fas fa-search"></i> Paramètres de Recherche
+                  </div>
+                  
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label>Code Dossier :</label>
+                        <input
+                          type="text"
+                          name="codeDossier"
+                          class="form-control"
+                          placeholder="Code Dossier"
+                          required
+                        >
+                        <div class="invalid-feedback">
+                          Le code dossier est requis
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label>Code Établissement :</label>
+                        <input
+                          type="text"
+                          name="codeEtablissement"
+                          class="form-control"
+                          placeholder="Code Établissement"
+                          required
+                        >
+                        <div class="invalid-feedback">
+                          Le code établissement est requis
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label>Date de début :</label>
+                        <small class="form-text text-muted">
+                          Le mois et l'année seront extraits automatiquement
+                        </small>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">
+                              <i class="fas fa-calendar-alt"></i>
+                            </span>
+                          </div>
+                          <input
+                            type="date"
+                            name="dateDebut"
+                            class="form-control"
+                            required
+                          >
+                          <div class="invalid-feedback">
+                            La date de début est requise
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label>Date de fin :</label>
+                        <small class="form-text text-muted">
+                          Le mois et l'année seront extraits automatiquement
+                        </small>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">
+                              <i class="fas fa-calendar-alt"></i>
+                            </span>
+                          </div>
+                          <input
+                            type="date"
+                            name="dateFin"
+                            class="form-control"
+                            required
+                          >
+                          <div class="invalid-feedback">
+                            La date de fin est requise
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Bouton de soumission -->
+                <div class="text-center mt-4">
+                  <button
+                    type="submit"
+                    class="btn btn-primary btn-lg"
+                  >
+                    <i class="fas fa-cloud-download-alt mr-2"></i>
+                    Récupérer via API
+                  </button>
+                </div>
+              </form>
+            </div>
+            
+            <!-- Tab Import Local -->
+            <div class="tab-pane fade" id="localTab" role="tabpanel">
+              <form id="localForm" class="needs-validation" novalidate>
+                <div class="form-section">
+                  <div class="form-section-title">
+                    <i class="fas fa-file-upload"></i> Import local de DSN (.txt)
+                  </div>
+                  
+                  <div class="form-group">
+                    <label for="dsnFiles">Fichiers DSN :</label>
+                    <div class="custom-file">
+                      <input
+                        type="file"
+                        id="dsnFiles"
+                        name="dsnFiles"
+                        class="custom-file-input"
+                        multiple
+                        accept=".txt"
+                        required
+                      >
+                      <label class="custom-file-label" for="dsnFiles">Choisir des fichiers</label>
+                      <div class="invalid-feedback">
+                        Veuillez sélectionner au moins un fichier DSN
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div id="selectedFiles" class="mt-3">
+                    <div class="alert alert-info">
+                      Aucun fichier sélectionné
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Bouton de soumission -->
+                <div class="text-center mt-4">
+                  <button
+                    type="submit"
+                    class="btn btn-primary btn-lg"
+                  >
+                    <i class="fas fa-file-import mr-2"></i>
+                    Importer les fichiers
+                  </button>
+                </div>
+              </form>
+            </div>
+            
+            <!-- Tab Paramètres -->
+            <div class="tab-pane fade" id="settingsTab" role="tabpanel">
+              <form id="settingsForm">
+                <div class="form-section">
+                  <div class="form-section-title">
+                    <i class="fas fa-cogs"></i> Options d'analyse
+                  </div>
+                  
+                  <div class="form-group">
+                    <label>Taille des lots de traitement:</label>
+                    <select name="batchSize" class="form-control">
+                      <option value="10">10 (Recommandé pour les petits fichiers)</option>
+                      <option value="50" selected>50 (Par défaut)</option>
+                      <option value="100">100 (Pour de meilleures performances)</option>
+                      <option value="200">200 (Pour de très grands fichiers)</option>
+                    </select>
+                    <small class="form-text text-muted">
+                      Définit le nombre d'enregistrements traités en une seule opération. Une valeur plus élevée peut améliorer les performances mais consomme plus de mémoire.
+                    </small>
+                  </div>
+                  
+                  <div class="form-group">
+                    <div class="custom-control custom-switch">
+                      <input type="checkbox" class="custom-control-input" id="cacheEnabled" name="cacheEnabled" checked>
+                      <label class="custom-control-label" for="cacheEnabled">Activer la mise en cache</label>
+                    </div>
+                    <small class="form-text text-muted">
+                      Améliore les performances en gardant certaines données en mémoire, mais peut consommer plus de ressources.
+                    </small>
+                  </div>
+                  
+                  <div class="form-group">
+                    <div class="custom-control custom-switch">
+                      <input type="checkbox" class="custom-control-input" id="overwriteData" name="overwriteData">
+                      <label class="custom-control-label" for="overwriteData">Écraser les données existantes</label>
+                    </div>
+                    <small class="form-text text-muted">
+                      Si activé, les données existantes pour un mois seront effacées avant d'importer les nouvelles.
+                    </small>
+                  </div>
+                </div>
+                
+                <div class="form-section">
+                  <div class="form-section-title">
+                    <i class="fas fa-chart-line"></i> Options d'analyse
+                  </div>
+                  
+                  <div class="form-group">
+                    <label>Méthode de calcul de la rémunération:</label>
+                    <select name="remuMethod" class="form-control">
+                      <option value="v1" selected>Version 1 (Standard)</option>
+                      <option value="v2">Version 2 (Complet)</option>
+                      <option value="both">Les deux</option>
+                    </select>
+                  </div>
+                  
+                  <div class="form-group">
+                    <div class="custom-control custom-switch">
+                      <input type="checkbox" class="custom-control-input" id="detectAnomaly" name="detectAnomaly" checked>
+                      <label class="custom-control-label" for="detectAnomaly">Détecter les anomalies de salaire</label>
+                    </div>
+                    <small class="form-text text-muted">
+                      Met en évidence les variations significatives de salaire.
+                    </small>
+                  </div>
+                </div>
+                
+                <!-- Bouton de sauvegarde -->
+                <div class="text-center mt-4">
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    id="saveSettingsBtn"
+                  >
+                    <i class="fas fa-save mr-2"></i>
+                    Enregistrer les paramètres
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+          <!-- Loader -->
+          <div class="loader" id="loader"></div>
+          
+          <!-- Résultat -->
+          <div id="resultat" class="mt-4"></div>
+          
+          <!-- Barre de progression -->
+          <div id="progressContainer" style="display: none;" class="mt-4">
+            <div class="d-flex justify-content-between mb-2">
+              <span id="progressStatus">En cours...</span>
+              <span id="progressPercent">0%</span>
+            </div>
+            <div class="progress" style="height: 20px;">
+              <div
+                id="progressBar"
+                class="progress-bar progress-bar-striped progress-bar-animated"
+                role="progressbar"
+                style="width: 0%;"
+                aria-valuenow="0"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              ></div>
+            </div>
+            <div id="progressDetails" class="mt-2 small text-muted"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Pré-remplit les dates au chargement (1er jour du mois précédent / dernier jour du mois précédent)
+      window.onload = function(){
+        // Initialiser les dates
+        initDates();
+        
+        // Initialiser les événements
+        initEvents();
+        
+        // Charger les paramètres
+        loadSettings();
+      };
+      
+      function initDates() {
+        let today = new Date();
+        let lastMonth = new Date(today.getFullYear(), today.getMonth()-1, 1);
+        let lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+        document.querySelector('input[name="dateDebut"]').valueAsDate = lastMonth;
+        document.querySelector('input[name="dateFin"]').valueAsDate = lastDay;
+      }
+      
+      function initEvents() {
+        // Validation des formulaires
+        document.getElementById('apiForm').addEventListener('submit', function(event) {
+          event.preventDefault();
+          if (this.checkValidity() === false) {
+            event.stopPropagation();
+          } else {
+            processAPIForm();
+          }
+          this.classList.add('was-validated');
+        });
+        
+        document.getElementById('localForm').addEventListener('submit', function(event) {
+          event.preventDefault();
+          if (this.checkValidity() === false) {
+            event.stopPropagation();
+          } else {
+            processLocalForm();
+          }
+          this.classList.add('was-validated');
+        });
+        
+        // Gestion de l'affichage des fichiers sélectionnés
+        document.getElementById('dsnFiles').addEventListener('change', updateFileList);
+        
+        // Sauvegarde des paramètres
+        document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+      }
+      
+      // Affiche/masque le mot de passe
+      function togglePassword(){
+        let pwd = document.getElementById("apiMotDePasse");
+        let icon = document.querySelector(".toggle-visibility i");
+        
+        if (pwd.type === "password") {
+          pwd.type = "text";
+          icon.classList.remove("fa-eye");
+          icon.classList.add("fa-eye-slash");
+        } else {
+          pwd.type = "password";
+          icon.classList.remove("fa-eye-slash");
+          icon.classList.add("fa-eye");
+        }
+      }
+      
+      // Mise à jour de la liste des fichiers sélectionnés
+      function updateFileList() {
+        const fileInput = document.getElementById('dsnFiles');
+        const selectedFiles = document.getElementById('selectedFiles');
+        
+        if (fileInput.files.length === 0) {
+          selectedFiles.innerHTML = `<div class="alert alert-info">Aucun fichier sélectionné</div>`;
+          return;
+        }
+        
+        let html = `<div class="card">
+                      <div class="card-header bg-primary text-white">
+                        <i class="fas fa-file-alt mr-2"></i>
+                        Fichiers sélectionnés (${fileInput.files.length})
+                      </div>
+                      <ul class="list-group list-group-flush">`;
+        
+        for (let i = 0; i < fileInput.files.length; i++) {
+          html += `<li class="list-group-item">
+                    <i class="fas fa-file-alt text-primary mr-2"></i>
+                    ${fileInput.files[i].name}
+                    <span class="badge badge-secondary float-right">
+                      ${(fileInput.files[i].size / 1024).toFixed(1)} KB
+                    </span>
+                  </li>`;
+        }
+        
+        html += `</ul></div>`;
+        selectedFiles.innerHTML = html;
+      }
+      
+      // Traitement du formulaire API
+      function processAPIForm() {
+        resetResults();
+        showProgress();
+        
+        const form = document.getElementById("apiForm");
+        const settings = getSettings();
+        
+        const formData = {
+          apiIdentifiant: form.apiIdentifiant.value.trim(),
+          apiMotDePasse: form.apiMotDePasse.value.trim(),
+          codeDossier: form.codeDossier.value.trim(),
+          codeEtablissement: form.codeEtablissement.value.trim(),
+          dateDebut: form.dateDebut.value,
+          dateFin: form.dateFin.value,
+          settings: settings
+        };
+        
+        updateProgress(15, "Connexion à l'API...");
+        
+        google.script.run
+          .withSuccessHandler(handleAPISuccess)
+          .withFailureHandler(handleFailure)
+          .importerDSNForAnalysis(formData);
+      }
+      
+      // Traitement du formulaire local
+      function processLocalForm() {
+        resetResults();
+        showProgress();
+        
+        const settings = getSettings();
+        updateProgress(10, "Lecture des fichiers...");
+        
+        lireFichiersLocal().then(allTexts => {
+          if(allTexts.length > 0) {
+            updateProgress(40, "Analyse des fichiers...");
+            
+            google.script.run
+              .withSuccessHandler(handleLocalSuccess)
+              .withFailureHandler(handleFailure)
+              .parseLocalTextDSNs(allTexts, settings);
+          } else {
+            updateProgress(100, "Terminé", "Aucun fichier à traiter.");
+            document.getElementById("loader").style.display = "none";
+          }
+        });
+      }
+      
+      // Lecture des fichiers DSN locaux
+      function lireFichiersLocal() {
+        return new Promise((resolve) => {
+          const files = document.getElementById('dsnFiles')?.files;
+          if(!files || files.length === 0) {
+            resolve([]);
+            return;
+          }
+          
+          updateProgress(20, `Lecture de ${files.length} fichiers...`);
+          
+          let allTexts = [];
+          let count = 0;
+          
+          for(let i = 0; i < files.length; i++){
+            updateProgress(20 + Math.floor(20 * (i / files.length)), 
+                          `Lecture du fichier ${i+1}/${files.length}...`);
+            
+            let reader = new FileReader();
+            reader.onload = function(e) {
+              allTexts.push(e.target.result);
+              count++;
+              if(count === files.length) resolve(allTexts);
+            };
+            reader.onerror = function() {
+              count++;
+              if(count === files.length) resolve(allTexts);
+            };
+            reader.readAsText(files[i], "UTF-8");
+          }
+        });
+      }
+      
+      // Gestion des succès et erreurs
+      function handleAPISuccess(response) {
+        updateProgress(90, "Traitement des données...");
+        
+        if(response && response.apiDSNData) {
+          const settings = getSettings();
+          
+          google.script.run
+            .withSuccessHandler(function() {
+              showSuccessMessage(`DSN via API : ${response.apiDSNData.length} mois traités.`);
+            })
+            .withFailureHandler(handleFailure)
+            .storeDSNToSheets(response.apiDSNData, settings);
+        } else {
+          handleFailure("Aucune donnée reçue de l'API");
+        }
+      }
+      
+      function handleLocalSuccess(response) {
+        updateProgress(90, "Traitement des données...");
+        
+        if(response && response.localDSNData) {
+          const settings = getSettings();
+          
+          google.script.run
+            .withSuccessHandler(function() {
+              showSuccessMessage(`DSN locales : ${response.localDSNData.length} DSN analysées.`);
+            })
+            .withFailureHandler(handleFailure)
+            .storeLocalDSNToSheets(response.localDSNData, settings);
+        } else {
+          handleFailure("Erreur lors de l'analyse des fichiers");
+        }
+      }
+      
+      function handleFailure(error) {
+        document.getElementById("resultat").innerHTML =
+          `<div class="alert alert-danger">
+             <i class="fas fa-exclamation-triangle mr-2"></i>
+             Erreur : ${error.message || error}
+           </div>`;
+        hideProgress();
+      }
+      
+      // Affichage des messages de succès
+      function showSuccessMessage(message) {
+        let htmlMsg = `<div class='alert alert-success'>
+                         <h5><i class='fas fa-check-circle mr-2'></i>Opérations terminées</h5>
+                         <hr>
+                         <p>${message}</p>
+                       </div>`;
+        document.getElementById("resultat").innerHTML = htmlMsg;
+        updateProgress(100, "Terminé");
+        setTimeout(hideProgress, 1000);
+      }
+      
+      // Gestion de la barre de progression
+      function showProgress() {
+        document.getElementById("loader").style.display = "block";
+        document.getElementById("progressContainer").style.display = "block";
+      }
+      
+      function hideProgress() {
+        document.getElementById("loader").style.display = "none";
+      }
+      
+      function resetResults() {
+        document.getElementById("resultat").innerHTML = "";
+        document.getElementById("progressBar").style.width = "0%";
+        document.getElementById("progressPercent").textContent = "0%";
+        document.getElementById("progressStatus").textContent = "En cours...";
+        document.getElementById("progressDetails").textContent = "";
+      }
+      
+      // Actualise la barre de progression
+      function updateProgress(percent, status, details) {
+        const progressBar = document.getElementById("progressBar");
+        const progressPercent = document.getElementById("progressPercent");
+        const progressStatus = document.getElementById("progressStatus");
+        const progressDetails = document.getElementById("progressDetails");
+
+        progressBar.style.width = percent + "%";
+        progressBar.setAttribute("aria-valuenow", percent);
+        progressPercent.textContent = percent + "%";
+        
+        if(status) progressStatus.textContent = status;
+        if(details) progressDetails.textContent = details;
+
+        if(percent < 30) {
+          progressBar.className = "progress-bar progress-bar-striped progress-bar-animated bg-info";
+        } else if(percent < 70) {
+          progressBar.className = "progress-bar progress-bar-striped progress-bar-animated bg-primary";
+        } else if(percent < 100) {
+          progressBar.className = "progress-bar progress-bar-striped progress-bar-animated bg-primary";
+        } else {
+          progressBar.className = "progress-bar bg-success";
+        }
+      }
+      
+      // Gestion des paramètres
+      function getSettings() {
+        return {
+          batchSize: parseInt(document.querySelector('select[name="batchSize"]').value),
+          cacheEnabled: document.getElementById('cacheEnabled').checked,
+          overwriteData: document.getElementById('overwriteData').checked,
+          remuMethod: document.querySelector('select[name="remuMethod"]').value,
+          detectAnomaly: document.getElementById('detectAnomaly').checked
+        };
+      }
+      
+      function saveSettings() {
+        const settings = getSettings();
+        localStorage.setItem('dsnAnalyzerSettings', JSON.stringify(settings));
+        
+        // Affichage d'un message de confirmation
+        document.getElementById("resultat").innerHTML = 
+          `<div class="alert alert-success">
+             <i class="fas fa-check-circle mr-2"></i>
+             Paramètres sauvegardés avec succès
+           </div>`;
+        
+        setTimeout(function() {
+          document.getElementById("resultat").innerHTML = "";
+        }, 3000);
+      }
+      
+      function loadSettings() {
+        const settingsStr = localStorage.getItem('dsnAnalyzerSettings');
+        if (settingsStr) {
+          try {
+            const settings = JSON.parse(settingsStr);
+            
+            document.querySelector('select[name="batchSize"]').value = settings.batchSize || 50;
+            document.getElementById('cacheEnabled').checked = settings.cacheEnabled !== false;
+            document.getElementById('overwriteData').checked = settings.overwriteData === true;
+            document.querySelector('select[name="remuMethod"]').value = settings.remuMethod || 'v1';
+            document.getElementById('detectAnomaly').checked = settings.detectAnomaly !== false;
+          } catch (e) {
+            console.error("Erreur lors du chargement des paramètres:", e);
+          }
+        }
+      }
+    </script>
+  </body>
+</html>
