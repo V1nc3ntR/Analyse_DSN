@@ -49,6 +49,11 @@ const DSNReportService = (function() {
     // Section 5: Tendances
     row = _generateTrendsSection(reportSheet, row, analysisData);
     
+    // NOUVEAUTÉ: Section 6: Index d'égalité professionnelle
+    if (analysisData.indexEgalite) {
+      row = _generateEqualityIndexSection(reportSheet, row, analysisData.indexEgalite);
+    }
+    
     // Ajouter des graphiques
     _addCharts(reportSheet, analysisData);
     
@@ -228,6 +233,56 @@ const DSNReportService = (function() {
       valeur: analysisData.anomalies.incompletes.length.toString()
     });
     
+    // NOUVEAUTÉ: 7. Index d'égalité professionnelle
+    if (analysisData.indexEgalite && analysisData.indexEgalite.resultat.total !== null) {
+      data.push({
+        section: "Index d'égalité professionnelle",
+        libelle: "Score global",
+        valeur: analysisData.indexEgalite.resultat.total + "/100"
+      });
+      
+      // Ajouter le détail des indicateurs
+      if (!analysisData.indexEgalite.indicateur1.nonCalculable) {
+        data.push({
+          section: "Index d'égalité professionnelle",
+          libelle: "Indicateur 1: Écart de rémunération",
+          valeur: analysisData.indexEgalite.indicateur1.score + "/40"
+        });
+      }
+      
+      if (!analysisData.indexEgalite.indicateur2.nonCalculable) {
+        data.push({
+          section: "Index d'égalité professionnelle",
+          libelle: "Indicateur 2: Écart d'augmentations",
+          valeur: analysisData.indexEgalite.indicateur2.score + "/20"
+        });
+      }
+      
+      if (!analysisData.indexEgalite.indicateur3.nonCalculable) {
+        data.push({
+          section: "Index d'égalité professionnelle",
+          libelle: "Indicateur 3: Écart de promotions",
+          valeur: analysisData.indexEgalite.indicateur3.score + "/15"
+        });
+      }
+      
+      if (!analysisData.indexEgalite.indicateur4.nonCalculable) {
+        data.push({
+          section: "Index d'égalité professionnelle",
+          libelle: "Indicateur 4: Retour congé maternité",
+          valeur: analysisData.indexEgalite.indicateur4.score + "/15"
+        });
+      }
+      
+      if (!analysisData.indexEgalite.indicateur5.nonCalculable) {
+        data.push({
+          section: "Index d'égalité professionnelle",
+          libelle: "Indicateur 5: 10 plus hautes rémunérations",
+          valeur: analysisData.indexEgalite.indicateur5.score + "/10"
+        });
+      }
+    }
+    
     // Générer le CSV en utilisant ExportManager si disponible
     if (typeof ExportManager !== 'undefined' && ExportManager.exportToCsv) {
       return ExportManager.exportToCsv(data);
@@ -238,302 +293,952 @@ const DSNReportService = (function() {
   }
   
   /**
-   * Génère un rapport détaillé des écarts salariaux par sexe
-   * @param {object} analysisData - Données d'analyse DSN
-   * @return {object} - Rapport formaté
+   * NOUVEAUTÉ: Génère un rapport dédié à l'Index d'Égalité Professionnelle
+   * @param {object} indexEgaliteData - Données de l'Index d'Égalité
+   * @param {object} options - Options de rapport
+   * @return {object} - Feuille de calcul générée et URL du rapport
    */
-  function generateGenderPayGapReport(analysisData) {
-    const report = {
-      title: "Rapport d'analyse des écarts salariaux H/F",
-      date: new Date(),
-      global: {
-        ecartGlobal: analysisData.global.remuneration.ecartHommesFemmes,
-        tauxFeminisation: analysisData.gepp.indicateursParite.tauxFeminisation,
-        effectifs: {
-          total: analysisData.global.effectifs.total,
-          hommes: analysisData.global.effectifs.hommes,
-          femmes: analysisData.global.effectifs.femmes
-        },
-        remuneration: {
-          moyenne: analysisData.global.remuneration.remunMoyenne
-        }
-      },
-      ecartParTrancheAge: {},
-      ecartDetailleParProfil: analysisData.anomalies.ecartsSalariaux,
-      recommendations: []
-    };
+  function generateEqualityIndexReport(indexEgaliteData, options = {}) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    // Calculer les écarts par tranche d'âge
-    for (const tranche in analysisData.global.remuneration.remunParTrancheAge) {
-      const t = analysisData.global.effectifs.repartitionAge[tranche];
-      if (t) {
-        // Calculer l'écart H/F spécifique à cette tranche d'âge
-        // Cette partie nécessiterait des données plus détaillées qui ne sont pas disponibles directement
-        // dans l'analysisData, on utilise donc une valeur approximative basée sur les écarts globaux
-        
-        report.ecartParTrancheAge[tranche] = {
-          total: analysisData.global.effectifs.repartitionAge[tranche],
-          salaireMoyen: analysisData.global.remuneration.remunParTrancheAge[tranche].moyenne,
-          // Valeur approximative dans cet exemple
-          ecart: analysisData.global.remuneration.ecartHommesFemmes * (Math.random() * 0.5 + 0.75)
-        };
+    // Créer une nouvelle feuille pour le rapport
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+    const reportName = options.sheetName || `Index_Egalite_Professionnelle_${today}`;
+    
+    // Vérifier si la feuille existe déjà et la supprimer le cas échéant
+    let reportSheet = ss.getSheetByName(reportName);
+    if (reportSheet) {
+      ss.deleteSheet(reportSheet);
+    }
+    
+    // Créer une nouvelle feuille
+    reportSheet = ss.insertSheet(reportName);
+    
+    // Formatage global de la feuille
+    reportSheet.setColumnWidth(1, 250);  // Colonne A
+    reportSheet.setColumnWidth(2, 200);  // Colonne B
+    reportSheet.setColumnWidth(3, 200);  // Colonne C
+    reportSheet.setColumnWidth(4, 200);  // Colonne D
+    reportSheet.setColumnWidth(5, 200);  // Colonne E
+    
+    // En-tête du rapport
+    reportSheet.getRange("A1:E1").merge();
+    reportSheet.getRange("A1").setValue("INDEX DE L'ÉGALITÉ PROFESSIONNELLE FEMMES-HOMMES")
+      .setFontWeight("bold")
+      .setFontSize(16)
+      .setHorizontalAlignment("center")
+      .setBackground("#4285F4")
+      .setFontColor("white");
+    
+    // Date du rapport
+    reportSheet.getRange("A2:E2").merge();
+    reportSheet.getRange("A2").setValue("Généré le " + 
+                                       Utilities.formatDate(new Date(), 
+                                                          Session.getScriptTimeZone(), 
+                                                          "dd/MM/yyyy"))
+      .setFontStyle("italic")
+      .setHorizontalAlignment("center");
+    
+    // Informations générales
+    reportSheet.getRange("A4:B4").merge();
+    reportSheet.getRange("A4").setValue("INFORMATIONS GÉNÉRALES")
+      .setFontWeight("bold")
+      .setBackground("#E0E0E0");
+    
+    let row = 5;
+    
+    // Période de référence
+    reportSheet.getRange(`A${row}`).setValue("Période de référence:");
+    if (indexEgaliteData.metadata.periodeReference.debut && indexEgaliteData.metadata.periodeReference.fin) {
+      const debut = Utilities.formatDate(indexEgaliteData.metadata.periodeReference.debut, 
+                                        Session.getScriptTimeZone(), "MMMM yyyy");
+      const fin = Utilities.formatDate(indexEgaliteData.metadata.periodeReference.fin, 
+                                      Session.getScriptTimeZone(), "MMMM yyyy");
+      reportSheet.getRange(`B${row}`).setValue(`${debut} à ${fin}`);
+    } else {
+      reportSheet.getRange(`B${row}`).setValue("Non spécifiée");
+    }
+    
+    row++;
+    
+    // Effectifs
+    reportSheet.getRange(`A${row}`).setValue("Effectif total:");
+    reportSheet.getRange(`B${row}`).setValue(indexEgaliteData.metadata.effectifTotal);
+    
+    row++;
+    
+    reportSheet.getRange(`A${row}`).setValue("Effectif hommes:");
+    reportSheet.getRange(`B${row}`).setValue(indexEgaliteData.metadata.effectifHommes);
+    
+    row++;
+    
+    reportSheet.getRange(`A${row}`).setValue("Effectif femmes:");
+    reportSheet.getRange(`B${row}`).setValue(indexEgaliteData.metadata.effectifFemmes);
+    
+    row++;
+    
+    // Taux de féminisation
+    const tauxFeminisation = indexEgaliteData.metadata.effectifTotal > 0 ? 
+      (indexEgaliteData.metadata.effectifFemmes / indexEgaliteData.metadata.effectifTotal) * 100 : 0;
+    
+    reportSheet.getRange(`A${row}`).setValue("Taux de féminisation:");
+    reportSheet.getRange(`B${row}`).setValue(tauxFeminisation / 100).setNumberFormat("0.0%");
+    
+    row += 2;
+    
+    // Résultat global
+    reportSheet.getRange(`A${row}:E${row}`).merge();
+    reportSheet.getRange(`A${row}`).setValue("RÉSULTAT GLOBAL")
+      .setFontWeight("bold")
+      .setBackground("#E0E0E0");
+    
+    row++;
+    
+    if (indexEgaliteData.resultat.total !== null) {
+      reportSheet.getRange(`A${row}:B${row}`).merge();
+      reportSheet.getRange(`A${row}`).setValue(`Index égalité professionnelle: ${indexEgaliteData.resultat.total}/100 points`)
+        .setFontWeight("bold")
+        .setFontSize(14)
+        .setHorizontalAlignment("center");
+      
+      // Coloriser selon le score
+      const score = indexEgaliteData.resultat.total;
+      let backgroundColor = "#C8E6C9"; // Vert clair (≥ 85)
+      
+      if (score < 75) {
+        backgroundColor = "#FFCDD2"; // Rouge clair (< 75) - Non conforme
+      } else if (score < 85) {
+        backgroundColor = "#FFF9C4"; // Jaune clair (75-84)
       }
+      
+      reportSheet.getRange(`A${row}:B${row}`).setBackground(backgroundColor);
+    } else {
+      reportSheet.getRange(`A${row}:B${row}`).merge();
+      reportSheet.getRange(`A${row}`).setValue("Index non calculable")
+        .setFontWeight("bold")
+        .setFontSize(14)
+        .setHorizontalAlignment("center")
+        .setBackground("#F5F5F5");
+      
+      row++;
+      
+      reportSheet.getRange(`A${row}:B${row}`).merge();
+      reportSheet.getRange(`A${row}`).setValue(
+        indexEgaliteData.resultat.publication.methodologie || 
+        "Nombre de points calculables insuffisant (< 75 points)"
+      )
+        .setFontStyle("italic")
+        .setHorizontalAlignment("center");
     }
     
-    // Générer des recommandations basées sur les écarts détectés
-    if (analysisData.global.remuneration.ecartHommesFemmes > 10) {
-      report.recommendations.push({
-        priorite: "Haute",
-        description: "Réaliser une analyse approfondie des écarts salariaux significatifs constatés (>10%)",
-        impact: "Conformité légale et équité interne"
-      });
-    }
+    row += 2;
     
-    if (analysisData.anomalies.ecartsSalariaux.length > 0) {
-      report.recommendations.push({
-        priorite: "Moyenne",
-        description: `Examiner les ${analysisData.anomalies.ecartsSalariaux.length} profils présentant des écarts salariaux significatifs`,
-        impact: "Réduction des inégalités salariales"
-      });
-    }
+    // Détail des indicateurs
+    reportSheet.getRange(`A${row}:E${row}`).merge();
+    reportSheet.getRange(`A${row}`).setValue("DÉTAIL DES INDICATEURS")
+      .setFontWeight("bold")
+      .setBackground("#E0E0E0");
     
-    // Recommandation standard pour améliorer la parité
-    report.recommendations.push({
-      priorite: "Standard",
-      description: "Mettre en place un plan d'action pour l'égalité professionnelle",
-      impact: "Amélioration de l'index égalité professionnelle"
-    });
+    row++;
     
-    return report;
+    // En-têtes du tableau des indicateurs
+    reportSheet.getRange(`A${row}`).setValue("Indicateur");
+    reportSheet.getRange(`B${row}`).setValue("Résultat");
+    reportSheet.getRange(`C${row}`).setValue("Points obtenus");
+    reportSheet.getRange(`D${row}`).setValue("Points possibles");
+    reportSheet.getRange(`E${row}`).setValue("Calculable");
+    
+    reportSheet.getRange(`A${row}:E${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+    
+    row++;
+    
+    // Indicateur 1: Écart de rémunération
+    _addIndicatorRow(reportSheet, row, 
+                   "1 - Écart de rémunération F/H", 
+                   indexEgaliteData.indicateur1.ecartGlobal ? 
+                     indexEgaliteData.indicateur1.ecartGlobal.toFixed(1) + "%" : "N/A",
+                   indexEgaliteData.indicateur1.score,
+                   40,
+                   !indexEgaliteData.indicateur1.nonCalculable);
+    
+    row++;
+    
+    // Indicateur 2: Écart de taux d'augmentation
+    _addIndicatorRow(reportSheet, row, 
+                   "2 - Écart de taux d'augmentation", 
+                   indexEgaliteData.indicateur2.ecartTauxAugmentation ? 
+                     indexEgaliteData.indicateur2.ecartTauxAugmentation.toFixed(1) + " pts" : "N/A",
+                   indexEgaliteData.indicateur2.score,
+                   20,
+                   !indexEgaliteData.indicateur2.nonCalculable);
+    
+    row++;
+    
+    // Indicateur 3: Écart de taux de promotion
+    _addIndicatorRow(reportSheet, row, 
+                   "3 - Écart de taux de promotion", 
+                   indexEgaliteData.indicateur3.ecartTauxPromotion ? 
+                     indexEgaliteData.indicateur3.ecartTauxPromotion.toFixed(1) + " pts" : "N/A",
+                   indexEgaliteData.indicateur3.score,
+                   15,
+                   !indexEgaliteData.indicateur3.nonCalculable);
+    
+    row++;
+    
+    // Indicateur 4: Retour de congé maternité
+    _addIndicatorRow(reportSheet, row, 
+                   "4 - Retour de congé maternité", 
+                   indexEgaliteData.indicateur4.tauxRespect ? 
+                     indexEgaliteData.indicateur4.tauxRespect.toFixed(1) + "%" : "N/A",
+                   indexEgaliteData.indicateur4.score,
+                   15,
+                   !indexEgaliteData.indicateur4.nonCalculable);
+    
+    row++;
+    
+    // Indicateur 5: 10 plus hautes rémunérations
+    _addIndicatorRow(reportSheet, row, 
+                   "5 - 10 plus hautes rémunérations", 
+                   indexEgaliteData.indicateur5.nombreFemmesPlusHautesRemunerations ? 
+                     indexEgaliteData.indicateur5.nombreFemmesPlusHautesRemunerations + " femmes" : "N/A",
+                   indexEgaliteData.indicateur5.score,
+                   10,
+                   !indexEgaliteData.indicateur5.nonCalculable);
+    
+    row += 2;
+    
+    // Détails par indicateur
+    _addDetailedIndicatorsSections(reportSheet, row, indexEgaliteData);
+    
+    // Retourner la feuille générée et son URL
+    return {
+      sheet: reportSheet,
+      url: ss.getUrl() + "#gid=" + reportSheet.getSheetId()
+    };
   }
   
   /**
-   * Génère un rapport spécifique d'analyse des fins de contrat
-   * @param {array} dsnDataArray - Tableau de données DSN au format 2025
-   * @return {object} - Rapport d'analyse des fins de contrat
+   * NOUVEAUTÉ: Génère une attestation de conformité pour l'Index d'Égalité Professionnelle
+   * @param {object} indexEgaliteData - Données de l'Index d'Égalité
+   * @param {object} options - Options de génération
+   * @return {object} - Document généré
    */
-  function generateContractEndingsReport(dsnDataArray) {
-    const report = {
-      title: "Analyse des fins de contrat",
-      date: new Date(),
-      global: {
-        totalContrats: 0,
-        totalFinsContrat: 0,
-        tauxFinContrat: 0,
-        repartitionParMotif: {}
-      },
-      detailParMois: [],
-      detailParProfil: {},
-      alertes: []
-    };
-    
-    // Codes motifs de rupture avec leurs libellés
-    const motifsRupture = {
-      "011": "Fin de contrat à durée déterminée",
-      "012": "Fin de mission d'intérim",
-      "020": "Licenciement pour motif économique",
-      "025": "Licenciement pour motif personnel",
-      "026": "Licenciement pour faute grave",
-      "031": "Rupture conventionnelle",
-      "032": "Rupture anticipée du contrat à durée déterminée à l'initiative de l'employeur",
-      "033": "Rupture anticipée du contrat à durée déterminée à l'initiative du salarié",
-      "034": "Rupture anticipée du contrat à durée déterminée d'un commun accord",
-      "043": "Démission",
-      "098": "Annulation",
-      "099": "Fin de relation avec l'employeur"
-    };
-    
-    // Initialiser les compteurs par motif
-    Object.keys(motifsRupture).forEach(code => {
-      report.global.repartitionParMotif[code] = {
-        libelle: motifsRupture[code],
-        count: 0,
-        pourcentage: 0
+  function generateEqualityIndexCertificate(indexEgaliteData, options = {}) {
+    // Vérifier si l'index est calculable
+    if (!indexEgaliteData.resultat.total) {
+      return {
+        success: false,
+        message: "Impossible de générer l'attestation: index non calculable"
       };
-    });
+    }
     
-    // Analyser chaque DSN
-    dsnDataArray.forEach(dsn => {
-      const moisPrincipal = dsn.moisPrincipal;
-      const contrats = dsn.contrats || [];
-      const finsMois = {
-        mois: moisPrincipal,
-        totalContrats: contrats.length,
-        contratsFinis: 0,
-        motifs: {}
+    // Si l'entreprise n'est pas conforme (score < 75), on ne peut pas générer d'attestation
+    if (indexEgaliteData.resultat.total < 75) {
+      return {
+        success: false,
+        message: "Impossible de générer l'attestation: index inférieur à 75 points (non conforme)"
       };
-      
-      // Initialiser les motifs pour ce mois
-      Object.keys(motifsRupture).forEach(code => {
-        finsMois.motifs[code] = 0;
-      });
-      
-      // Compter les contrats totaux
-      report.global.totalContrats += contrats.length;
-      
-      // Analyser les fins de contrat
-      contrats.forEach(contrat => {
-        // Vérifier s'il s'agit d'une fin de contrat
-        if (contrat.id.dateFin && contrat.id.dateFin <= new Date()) {
-          report.global.totalFinsContrat++;
-          finsMois.contratsFinis++;
-          
-          // Récupérer le motif de rupture (s'il existe)
-          let motifRupture = "099"; // Par défaut fin de relation
-          
-          // Rechercher les données de fin de contrat (bloc 62)
-          // Dans un cas réel, il faudrait accéder aux données spécifiques de fin de contrat
-          
-          // Mettre à jour les compteurs
-          if (report.global.repartitionParMotif[motifRupture]) {
-            report.global.repartitionParMotif[motifRupture].count++;
-            finsMois.motifs[motifRupture]++;
-          }
-          
-          // Analyser par profil
-          const salarie = dsn.salaries.find(s => s.identite.nir === contrat.id.nirSalarie);
-          if (salarie) {
-            const trancheAge = salarie.analytics.trancheAge || "Non spécifié";
-            const sexe = salarie.identite.sexe === "01" ? "Homme" : 
-                         salarie.identite.sexe === "02" ? "Femme" : "Non spécifié";
-            
-            const profilKey = `${trancheAge}_${sexe}`;
-            
-            if (!report.detailParProfil[profilKey]) {
-              report.detailParProfil[profilKey] = {
-                trancheAge: trancheAge,
-                sexe: sexe,
-                totalFins: 0,
-                motifs: {}
-              };
-              
-              // Initialiser les motifs pour ce profil
-              Object.keys(motifsRupture).forEach(code => {
-                report.detailParProfil[profilKey].motifs[code] = 0;
-              });
-            }
-            
-            report.detailParProfil[profilKey].totalFins++;
-            report.detailParProfil[profilKey].motifs[motifRupture]++;
-          }
-        }
-      });
-      
-      // Ajouter aux statistiques mensuelles
-      report.detailParMois.push(finsMois);
-    });
-    
-    // Calculer les pourcentages globaux
-    if (report.global.totalFinsContrat > 0) {
-      for (const motif in report.global.repartitionParMotif) {
-        report.global.repartitionParMotif[motif].pourcentage = 
-          (report.global.repartitionParMotif[motif].count / report.global.totalFinsContrat) * 100;
-      }
     }
     
-    // Calculer le taux global de fin de contrat
-    if (report.global.totalContrats > 0) {
-      report.global.tauxFinContrat = (report.global.totalFinsContrat / report.global.totalContrats) * 100;
-    }
-    
-    // Trier les mois par ordre chronologique
-    report.detailParMois.sort((a, b) => {
-      return _parseYearMonth(a.mois) - _parseYearMonth(b.mois);
-    });
-    
-    // Générer des alertes
-    
-    // Alerte 1: Taux élevé de fins de contrat
-    if (report.global.tauxFinContrat > 20) {
-      report.alertes.push({
-        type: "Attention",
-        description: `Taux élevé de fins de contrat (${report.global.tauxFinContrat.toFixed(1)}%)`,
-        impact: "Turn-over important pouvant indiquer des problèmes de rétention"
-      });
-    }
-    
-    // Alerte 2: Proportion importante de licenciements
-    const totalLicenciements = 
-      (report.global.repartitionParMotif["020"]?.count || 0) + 
-      (report.global.repartitionParMotif["025"]?.count || 0) + 
-      (report.global.repartitionParMotif["026"]?.count || 0);
-    
-    if (report.global.totalFinsContrat > 0 && (totalLicenciements / report.global.totalFinsContrat) > 0.3) {
-      report.alertes.push({
-        type: "Risque",
-        description: "Proportion élevée de licenciements",
-        impact: "Risque de contentieux et impact sur le climat social"
-      });
-    }
-    
-    // Alerte 3: Progression mensuelle des fins de contrat
-    if (report.detailParMois.length >= 3) {
-      const derniersMois = report.detailParMois.slice(-3);
-      let tendanceHausse = true;
+    try {
+      // Créer un Document Google Docs
+      const docTitle = options.title || "Attestation Index Égalité Professionnelle";
+      const doc = DocumentApp.create(docTitle);
+      const body = doc.getBody();
       
-      for (let i = 1; i < derniersMois.length; i++) {
-        const tauxMoisPrecedent = 
-          derniersMois[i-1].contratsFinis / Math.max(1, derniersMois[i-1].totalContrats);
-        const tauxMoisActuel = 
-          derniersMois[i].contratsFinis / Math.max(1, derniersMois[i].totalContrats);
-        
-        if (tauxMoisActuel <= tauxMoisPrecedent) {
-          tendanceHausse = false;
-          break;
-        }
-      }
+      // En-tête
+      const heading = body.appendParagraph("ATTESTATION DE CONFORMITÉ");
+      heading.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+      heading.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
       
-      if (tendanceHausse) {
-        report.alertes.push({
-          type: "Tendance",
-          description: "Hausse continue des fins de contrat sur les 3 derniers mois",
-          impact: "Tendance à surveiller pour anticiper d'éventuels départs massifs"
-        });
-      }
+      // Sous-titre
+      const subheading = body.appendParagraph("Index de l'égalité professionnelle femmes-hommes");
+      subheading.setHeading(DocumentApp.ParagraphHeading.HEADING2);
+      subheading.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+      
+      // Espace
+      body.appendParagraph("");
+      
+      // Corps du document
+      const intro = body.appendParagraph("Je soussigné(e), ......................................., " +
+                                        "agissant en qualité de ........................................, " +
+                                        `atteste sur l'honneur que l'entreprise ${options.companyName || "..........................."} ` +
+                                        `(SIREN: ${options.siren || "..........................."}) ` +
+                                        "est en conformité avec ses obligations en matière d'égalité professionnelle entre les femmes et les hommes.");
+      intro.setAlignment(DocumentApp.HorizontalAlignment.JUSTIFY);
+      
+      body.appendParagraph("");
+      
+      // Résultat
+      const scoreText = body.appendParagraph(`Pour la période du ${_formatDateFr(indexEgaliteData.metadata.periodeReference.debut)} ` +
+                                           `au ${_formatDateFr(indexEgaliteData.metadata.periodeReference.fin)}, ` +
+                                           `l'Index de l'égalité professionnelle obtenu est de ${indexEgaliteData.resultat.total}/100 points.`);
+      scoreText.setAlignment(DocumentApp.HorizontalAlignment.JUSTIFY);
+      scoreText.setBold(true);
+      
+      body.appendParagraph("");
+      
+      // Détail des indicateurs
+      const detailIntro = body.appendParagraph("Détail des indicateurs:");
+      detailIntro.setAlignment(DocumentApp.HorizontalAlignment.LEFT);
+      
+      // Indicateur 1
+      _addIndicatorTextToCertificate(body, 
+                                   "Écart de rémunération entre les femmes et les hommes", 
+                                   indexEgaliteData.indicateur1, 40);
+      
+      // Indicateur 2
+      _addIndicatorTextToCertificate(body, 
+                                   "Écarts de taux d'augmentations individuelles", 
+                                   indexEgaliteData.indicateur2, 20);
+      
+      // Indicateur 3
+      _addIndicatorTextToCertificate(body, 
+                                   "Écarts de taux de promotions", 
+                                   indexEgaliteData.indicateur3, 15);
+      
+      // Indicateur 4
+      _addIndicatorTextToCertificate(body, 
+                                   "Pourcentage de salariées augmentées au retour de congé maternité", 
+                                   indexEgaliteData.indicateur4, 15);
+      
+      // Indicateur 5
+      _addIndicatorTextToCertificate(body, 
+                                   "Nombre de salariés du sexe sous-représenté parmi les 10 plus hautes rémunérations", 
+                                   indexEgaliteData.indicateur5, 10);
+      
+      body.appendParagraph("");
+      body.appendParagraph("");
+      
+      // Signature
+      const signatureDate = body.appendParagraph("Fait à ........................., le " + 
+                                               Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy"));
+      signatureDate.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+      
+      body.appendParagraph("");
+      body.appendParagraph("");
+      body.appendParagraph("");
+      
+      const signature = body.appendParagraph("Signature et cachet");
+      signature.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+      
+      // Enregistrer et fermer le document
+      doc.saveAndClose();
+      
+      return {
+        success: true,
+        document: doc,
+        url: doc.getUrl(),
+        message: "Attestation générée avec succès"
+      };
+    } catch (e) {
+      return {
+        success: false,
+        message: "Erreur lors de la génération de l'attestation: " + e.toString()
+      };
     }
-    
-    return report;
   }
   
   /**
-   * Génère une trace JSON des principales données d'analyse
-   * @param {object} analysisData - Données d'analyse DSN
-   * @return {string} - JSON formaté
+   * Génère un tableau de bord détaillé pour l'ensemble des données
+   * @param {object} dashboard - Données du tableau de bord
+   * @return {object} - Données du tableau de bord
    */
-  function generateJSONDump(analysisData) {
-    // Créer un objet simplifié sans les données trop détaillées
-    const simplifiedData = {
-      periode: {
-        debut: analysisData.global.periodeCouverte.debut,
-        fin: analysisData.global.periodeCouverte.fin
-      },
-      effectifs: analysisData.global.effectifs,
-      remuneration: {
-        masseSalariale: analysisData.global.remuneration.masseSalarialeTotale,
-        moyenne: analysisData.global.remuneration.remunMoyenne,
-        mediane: analysisData.global.remuneration.remunMediane,
-        ecartHF: analysisData.global.remuneration.ecartHommesFemmes
-      },
-      contrats: {
-        total: analysisData.global.contrats.total,
-        repartition: analysisData.global.contrats.typesContrat
-      },
-      tendances: {
-        effectifs: analysisData.tendances.effectifs,
-        salaires: analysisData.tendances.remuneration
-      },
-      anomalies: {
-        ecartsHF: analysisData.anomalies.ecartsSalariaux.length,
-        remuAnormales: analysisData.anomalies.remunerationAnormales.length,
-        donneesIncompletes: analysisData.anomalies.incompletes.length
-      }
-    };
+  function generateGenderPayGapReport(dashboard) {
+    // Statistiques générales
+    const stats = dashboard.stats;
     
-    // Retourner le JSON formaté
-    return JSON.stringify(simplifiedData, null, 2);
+    // Analyse des arrêts de travail
+    const arrets = dashboard.arrets;
+    
+    // Rapports de conformité
+    const compliance = dashboard.compliance;
+    
+    // Détection des anomalies salariales
+    const anomalies = dashboard.anomalies;
+    
+    // NOUVEAUTÉ: Index d'égalité professionnelle
+    const indexEgalite = dashboard.indexEgalite;
+    
+    // Agréger toutes les données dans un objet de tableau de bord
+    return {
+      stats: stats,
+      arrets: arrets,
+      compliance: compliance,
+      anomalies: anomalies,
+      indexEgalite: indexEgalite,
+      lastUpdate: new Date()
+    };
   }
   
-  // ===== Fonctions privées pour la génération de rapport =====
+  /**
+   * Génère un rapport au format Excel pour exportation
+   * @param {object} dashboard - Données du tableau de bord
+   * @return {Spreadsheet} - Feuille Excel générée
+   */
+  function exportDashboardToSheet(dashboard) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let reportSheet = ss.getSheetByName("Tableau de bord");
+    
+    if (reportSheet) {
+      // Supprimer la feuille existante pour la recréer
+      ss.deleteSheet(reportSheet);
+    }
+    
+    reportSheet = ss.insertSheet("Tableau de bord");
+    
+    // Titre du rapport
+    reportSheet.getRange("A1:F1").merge();
+    reportSheet.getRange("A1").setValue("TABLEAU DE BORD DSN")
+      .setFontWeight("bold")
+      .setFontSize(16)
+      .setHorizontalAlignment("center");
+    
+    // Date du rapport
+    reportSheet.getRange("A2:F2").merge();
+    reportSheet.getRange("A2").setValue("Généré le " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy à HH:mm"))
+      .setFontStyle("italic")
+      .setHorizontalAlignment("center");
+    
+    // Section 1: Statistiques globales
+    reportSheet.getRange("A4").setValue("STATISTIQUES GLOBALES")
+      .setFontWeight("bold")
+      .setFontSize(14);
+    
+    reportSheet.getRange("A5").setValue("Nombre total d'individus:");
+    reportSheet.getRange("B5").setValue(dashboard.stats.global.totalIndividus);
+    
+    reportSheet.getRange("A6").setValue("Hommes:");
+    reportSheet.getRange("B6").setValue(dashboard.stats.global.hommes);
+    
+    reportSheet.getRange("A7").setValue("Femmes:");
+    reportSheet.getRange("B7").setValue(dashboard.stats.global.femmes);
+    
+    reportSheet.getRange("A8").setValue("Salaire moyen:");
+    reportSheet.getRange("B8").setValue(dashboard.stats.global.salaireMoyen)
+      .setNumberFormat("0.00 €");
+    
+    reportSheet.getRange("A9").setValue("Salaire médian:");
+    reportSheet.getRange("B9").setValue(dashboard.stats.global.salaireMedian)
+      .setNumberFormat("0.00 €");
+    
+    reportSheet.getRange("A10").setValue("Écart salarial H/F:");
+    reportSheet.getRange("B10").setValue(dashboard.stats.global.ecartHommesFemmes + "%")
+      .setNumberFormat("0.00%");
+    
+    // Section 2: Répartition par tranche d'âge
+    reportSheet.getRange("A12").setValue("RÉPARTITION PAR TRANCHE D'ÂGE")
+      .setFontWeight("bold")
+      .setFontSize(14);
+    
+    reportSheet.getRange("A13:E13").setValues([["Tranche d'âge", "Total", "Hommes", "Femmes", "Salaire moyen"]]);
+    
+    let row = 14;
+    Object.keys(dashboard.stats.tranchesAge).forEach(tranche => {
+      const t = dashboard.stats.tranchesAge[tranche];
+      reportSheet.getRange(`A${row}:E${row}`).setValues([
+        [tranche, t.total, t.hommes, t.femmes, t.salaireMoyen]
+      ]);
+      reportSheet.getRange(`E${row}`).setNumberFormat("0.00 €");
+      row++;
+    });
+    
+    // Section 3: Anomalies salariales
+    row += 2;
+    reportSheet.getRange(`A${row}`).setValue("ANOMALIES SALARIALES")
+      .setFontWeight("bold")
+      .setFontSize(14);
+    
+    if (dashboard.anomalies.length > 0) {
+      row++;
+      reportSheet.getRange(`A${row}:H${row}`).setValues([
+        ["Mois", "NIR", "Nom", "Prénom", "Contrat", "Ancien salaire", "Nouveau salaire", "Variation"]
+      ]);
+      
+      dashboard.anomalies.forEach(a => {
+        row++;
+        reportSheet.getRange(`A${row}:H${row}`).setValues([
+          [a.mois, a.nir, a.nom, a.prenom, a.contrat, a.ancienSalaire, a.nouveauSalaire, a.variation]
+        ]);
+        reportSheet.getRange(`F${row}:G${row}`).setNumberFormat("0.00 €");
+      });
+    } else {
+      row++;
+      reportSheet.getRange(`A${row}`).setValue("Aucune anomalie salariale détectée.")
+        .setFontStyle("italic");
+    }
+    
+    // Section 4: Arrêts de travail
+    row += 2;
+    reportSheet.getRange(`A${row}`).setValue("ARRÊTS DE TRAVAIL")
+      .setFontWeight("bold")
+      .setFontSize(14);
+    
+    row++;
+    reportSheet.getRange(`A${row}`).setValue("Nombre total d'arrêts:");
+    reportSheet.getRange(`B${row}`).setValue(dashboard.arrets.total);
+    
+    row++;
+    reportSheet.getRange(`A${row}`).setValue("Durée moyenne des arrêts:");
+    reportSheet.getRange(`B${row}`).setValue(dashboard.arrets.dureeMoyenne.toFixed(1) + " jours");
+    
+    row += 2;
+    reportSheet.getRange(`A${row}`).setValue("Répartition par motif");
+    
+    row++;
+    reportSheet.getRange(`A${row}:D${row}`).setValues([
+      ["Motif", "Nombre", "% du total", "Durée moyenne"]
+    ]);
+    
+    Object.keys(dashboard.arrets.parMotif).forEach(motif => {
+      if (dashboard.arrets.parMotif[motif].count > 0) {
+        row++;
+        const pct = (dashboard.arrets.parMotif[motif].count / dashboard.arrets.total) * 100;
+        reportSheet.getRange(`A${row}:D${row}`).setValues([
+          [
+            dashboard.arrets.parMotif[motif].libelle,
+            dashboard.arrets.parMotif[motif].count,
+            pct.toFixed(1) + "%",
+            dashboard.arrets.parMotif[motif].dureeMoyenne.toFixed(1) + " jours"
+          ]
+        ]);
+      }
+    });
+    
+    // NOUVEAUTÉ: Section 5: Index d'égalité professionnelle 
+    if (dashboard.indexEgalite && dashboard.indexEgalite.resultat) {
+      row += 3;
+      reportSheet.getRange(`A${row}`).setValue("INDEX D'ÉGALITÉ PROFESSIONNELLE")
+        .setFontWeight("bold")
+        .setFontSize(14);
+      
+      row++;
+      if (dashboard.indexEgalite.resultat.total !== null) {
+        reportSheet.getRange(`A${row}`).setValue("Score global:");
+        reportSheet.getRange(`B${row}`).setValue(dashboard.indexEgalite.resultat.total + "/100")
+          .setFontWeight("bold");
+        
+        // Mettre en évidence si le score est non conforme (< 75)
+        if (dashboard.indexEgalite.resultat.total < 75) {
+          reportSheet.getRange(`B${row}`).setBackground("#FFCDD2"); // Rouge clair
+        }
+      } else {
+        reportSheet.getRange(`A${row}`).setValue("Index non calculable")
+          .setFontWeight("bold");
+      }
+      
+      row += 2;
+      reportSheet.getRange(`A${row}`).setValue("Détail des indicateurs:");
+      
+      row++;
+      reportSheet.getRange(`A${row}:C${row}`).setValues([
+        ["Indicateur", "Score obtenu", "Score maximum"]
+      ]);
+      
+      // Indicateur 1
+      if (!dashboard.indexEgalite.indicateur1.nonCalculable) {
+        row++;
+        reportSheet.getRange(`A${row}:C${row}`).setValues([
+          ["1 - Écart de rémunération", dashboard.indexEgalite.indicateur1.score, 40]
+        ]);
+      }
+      
+      // Indicateur 2
+      if (!dashboard.indexEgalite.indicateur2.nonCalculable) {
+        row++;
+        reportSheet.getRange(`A${row}:C${row}`).setValues([
+          ["2 - Écart de taux d'augmentation", dashboard.indexEgalite.indicateur2.score, 20]
+        ]);
+      }
+      
+      // Indicateur 3
+      if (!dashboard.indexEgalite.indicateur3.nonCalculable) {
+        row++;
+        reportSheet.getRange(`A${row}:C${row}`).setValues([
+          ["3 - Écart de taux de promotion", dashboard.indexEgalite.indicateur3.score, 15]
+        ]);
+      }
+      
+      // Indicateur 4
+      if (!dashboard.indexEgalite.indicateur4.nonCalculable) {
+        row++;
+        reportSheet.getRange(`A${row}:C${row}`).setValues([
+          ["4 - Retour de congé maternité", dashboard.indexEgalite.indicateur4.score, 15]
+        ]);
+      }
+      
+      // Indicateur 5
+      if (!dashboard.indexEgalite.indicateur5.nonCalculable) {
+        row++;
+        reportSheet.getRange(`A${row}:C${row}`).setValues([
+          ["5 - 10 plus hautes rémunérations", dashboard.indexEgalite.indicateur5.score, 10]
+        ]);
+      }
+    }
+    
+    // Appliquer un formatage global
+    reportSheet.autoResizeColumns(1, 8);
+    
+    return reportSheet;
+  }
+  
+  // ===== NOUVEAUTÉ: Fonctions privées pour les rapports d'égalité =====
+  
+  /**
+   * Ajoute une ligne d'indicateur dans le rapport d'Index d'Égalité
+   * @private
+   * @param {Sheet} sheet - Feuille de rapport
+   * @param {number} row - Numéro de ligne
+   * @param {string} label - Libellé de l'indicateur
+   * @param {string} result - Résultat de l'indicateur
+   * @param {number} score - Score obtenu
+   * @param {number} maxScore - Score maximum
+   * @param {boolean} calculable - Indicateur calculable
+   */
+  function _addIndicatorRow(sheet, row, label, result, score, maxScore, calculable) {
+    sheet.getRange(`A${row}`).setValue(label);
+    sheet.getRange(`B${row}`).setValue(result);
+    
+    if (calculable) {
+      sheet.getRange(`C${row}`).setValue(score);
+      sheet.getRange(`D${row}`).setValue(maxScore);
+      sheet.getRange(`E${row}`).setValue("Oui");
+    } else {
+      sheet.getRange(`C${row}`).setValue("N/A");
+      sheet.getRange(`D${row}`).setValue(maxScore);
+      sheet.getRange(`E${row}`).setValue("Non");
+    }
+  }
+  
+  /**
+   * Ajoute un indicateur à l'attestation
+   * @private
+   * @param {Body} body - Corps du document
+   * @param {string} title - Titre de l'indicateur
+   * @param {object} indicator - Données de l'indicateur
+   * @param {number} maxScore - Score maximum
+   */
+  function _addIndicatorTextToCertificate(body, title, indicator, maxScore) {
+    let text;
+    
+    if (indicator.nonCalculable) {
+      text = `• ${title}: Non calculable (${indicator.motifNonCalculable || "effectifs insuffisants"})`;
+    } else {
+      text = `• ${title}: ${indicator.score}/${maxScore} points`;
+    }
+    
+    const paragraph = body.appendParagraph(text);
+    paragraph.setAlignment(DocumentApp.HorizontalAlignment.LEFT);
+  }
+  
+  /**
+   * Ajoute les sections détaillées des indicateurs
+   * @private
+   * @param {Sheet} sheet - Feuille de rapport
+   * @param {number} startRow - Ligne de début
+   * @param {object} indexEgaliteData - Données de l'Index d'Égalité
+   * @return {number} - Nouvelle ligne courante
+   */
+  function _addDetailedIndicatorsSections(sheet, startRow, indexEgaliteData) {
+    let row = startRow;
+    
+    // Détail de l'indicateur 1 - Écart de rémunération
+    if (!indexEgaliteData.indicateur1.nonCalculable && indexEgaliteData.indicateur1.parCategorie.length > 0) {
+      sheet.getRange(`A${row}:E${row}`).merge();
+      sheet.getRange(`A${row}`).setValue("DÉTAIL DE L'INDICATEUR 1: ÉCART DE RÉMUNÉRATION")
+        .setFontWeight("bold")
+        .setBackground("#E0E0E0");
+      
+      row++;
+      
+      // En-têtes du tableau détaillé
+      sheet.getRange(`A${row}`).setValue("Catégorie");
+      sheet.getRange(`B${row}`).setValue("Tranche d'âge");
+      sheet.getRange(`C${row}`).setValue("Rému. Hommes");
+      sheet.getRange(`D${row}`).setValue("Rému. Femmes");
+      sheet.getRange(`E${row}`).setValue("Écart (%)");
+      
+      sheet.getRange(`A${row}:E${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+      
+      row++;
+      
+      // Données détaillées par catégorie
+      indexEgaliteData.indicateur1.parCategorie.forEach(cat => {
+        sheet.getRange(`A${row}`).setValue(cat.categorie);
+        sheet.getRange(`B${row}`).setValue(cat.trancheAge);
+        sheet.getRange(`C${row}`).setValue(cat.remuHommes).setNumberFormat("#,##0.00 €");
+        sheet.getRange(`D${row}`).setValue(cat.remuFemmes).setNumberFormat("#,##0.00 €");
+        sheet.getRange(`E${row}`).setValue(cat.ecart / 100).setNumberFormat("0.0%");
+        
+        // Colorer l'écart selon son importance
+        if (cat.ecart > 5) {
+          sheet.getRange(`E${row}`).setBackground("#FFCDD2"); // Rouge clair (défavorable aux femmes)
+        } else if (cat.ecart < -5) {
+          sheet.getRange(`E${row}`).setBackground("#C8E6C9"); // Vert clair (défavorable aux hommes)
+        }
+        
+        row++;
+      });
+      
+      // Écart global pondéré
+      row++;
+      sheet.getRange(`A${row}:D${row}`).merge();
+      sheet.getRange(`A${row}`).setValue("Écart global pondéré:").setFontWeight("bold");
+      sheet.getRange(`E${row}`).setValue(indexEgaliteData.indicateur1.ecartGlobal / 100)
+        .setNumberFormat("0.0%")
+        .setFontWeight("bold");
+      
+      row += 2;
+    }
+    
+    // Détail de l'indicateur 2 - Écart de taux d'augmentation
+    if (!indexEgaliteData.indicateur2.nonCalculable) {
+      sheet.getRange(`A${row}:E${row}`).merge();
+      sheet.getRange(`A${row}`).setValue("DÉTAIL DE L'INDICATEUR 2: ÉCART DE TAUX D'AUGMENTATION")
+        .setFontWeight("bold")
+        .setBackground("#E0E0E0");
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Pourcentage d'hommes augmentés:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur2.tauxAugmentationHommes / 100)
+        .setNumberFormat("0.0%");
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Pourcentage de femmes augmentées:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur2.tauxAugmentationFemmes / 100)
+        .setNumberFormat("0.0%");
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Écart en points de %:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur2.ecartTauxAugmentation);
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Nombre d'hommes pris en compte:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur2.nombreHommes);
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Nombre de femmes prises en compte:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur2.nombreFemmes);
+      
+      row += 2;
+    }
+    
+    // Détail de l'indicateur 3 - Écart de taux de promotion
+    if (!indexEgaliteData.indicateur3.nonCalculable) {
+      sheet.getRange(`A${row}:E${row}`).merge();
+      sheet.getRange(`A${row}`).setValue("DÉTAIL DE L'INDICATEUR 3: ÉCART DE TAUX DE PROMOTION")
+        .setFontWeight("bold")
+        .setBackground("#E0E0E0");
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Pourcentage d'hommes promus:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur3.tauxPromotionHommes / 100)
+        .setNumberFormat("0.0%");
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Pourcentage de femmes promues:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur3.tauxPromotionFemmes / 100)
+        .setNumberFormat("0.0%");
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Écart en points de %:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur3.ecartTauxPromotion);
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Nombre d'hommes pris en compte:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur3.nombreHommes);
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Nombre de femmes prises en compte:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur3.nombreFemmes);
+      
+      row += 2;
+    }
+    
+    // Détail de l'indicateur 4 - Retour de congé maternité
+    if (!indexEgaliteData.indicateur4.nonCalculable) {
+      sheet.getRange(`A${row}:E${row}`).merge();
+      sheet.getRange(`A${row}`).setValue("DÉTAIL DE L'INDICATEUR 4: RETOUR DE CONGÉ MATERNITÉ")
+        .setFontWeight("bold")
+        .setBackground("#E0E0E0");
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Nombre de retours de congé maternité:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur4.nombreRetourCongeMaternite);
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Nombre de femmes augmentées au retour:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur4.nombreAugmentees);
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Taux de respect (%):");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur4.tauxRespect / 100)
+        .setNumberFormat("0.0%");
+      
+      row += 2;
+    }
+    
+    // Détail de l'indicateur 5 - 10 plus hautes rémunérations
+    if (!indexEgaliteData.indicateur5.nonCalculable) {
+      sheet.getRange(`A${row}:E${row}`).merge();
+      sheet.getRange(`A${row}`).setValue("DÉTAIL DE L'INDICATEUR 5: 10 PLUS HAUTES RÉMUNÉRATIONS")
+        .setFontWeight("bold")
+        .setBackground("#E0E0E0");
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Nombre de femmes parmi les 10+ hautes rémunérations:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur5.nombreFemmesPlusHautesRemunerations);
+      
+      row++;
+      
+      sheet.getRange(`A${row}`).setValue("Nombre d'hommes parmi les 10+ hautes rémunérations:");
+      sheet.getRange(`B${row}`).setValue(indexEgaliteData.indicateur5.nombreHommesPlusHautesRemunerations);
+    }
+    
+    return row;
+  }
+  
+  /**
+   * Génère la section d'index d'égalité professionnelle dans le rapport principal
+   * @private
+   * @param {Sheet} sheet - Feuille de calcul
+   * @param {number} startRow - Ligne de début
+   * @param {object} indexEgalite - Données de l'Index d'Égalité
+   * @return {number} - Nouvelle ligne courante
+   */
+  function _generateEqualityIndexSection(sheet, startRow, indexEgalite) {
+    let row = startRow;
+    
+    // Titre de section
+    sheet.getRange(`A${row}:E${row}`).merge();
+    sheet.getRange(`A${row}`).setValue("INDEX D'ÉGALITÉ PROFESSIONNELLE")
+      .setFontWeight("bold")
+      .setBackground("#F1F3F4");
+    
+    row += 2;
+    
+    // Résultat global
+    if (indexEgalite.resultat.total !== null) {
+      sheet.getRange(`A${row}:B${row}`).merge();
+      sheet.getRange(`A${row}`).setValue(`Index égalité professionnelle: ${indexEgalite.resultat.total}/100 points`)
+        .setFontWeight("bold")
+        .setFontSize(14)
+        .setHorizontalAlignment("center");
+      
+      // Coloriser selon le score
+      const score = indexEgalite.resultat.total;
+      let backgroundColor = "#C8E6C9"; // Vert clair (≥ 85)
+      
+      if (score < 75) {
+        backgroundColor = "#FFCDD2"; // Rouge clair (< 75) - Non conforme
+      } else if (score < 85) {
+        backgroundColor = "#FFF9C4"; // Jaune clair (75-84)
+      }
+      
+      sheet.getRange(`A${row}:B${row}`).setBackground(backgroundColor);
+    } else {
+      sheet.getRange(`A${row}:B${row}`).merge();
+      sheet.getRange(`A${row}`).setValue("Index non calculable")
+        .setFontWeight("bold")
+        .setFontSize(14)
+        .setHorizontalAlignment("center")
+        .setBackground("#F5F5F5");
+      
+      row++;
+      
+      sheet.getRange(`A${row}:B${row}`).merge();
+      sheet.getRange(`A${row}`).setValue(
+        indexEgalite.resultat.publication.methodologie || 
+        "Nombre de points calculables insuffisant (< 75 points)"
+      )
+        .setFontStyle("italic")
+        .setHorizontalAlignment("center");
+    }
+    
+    row += 2;
+    
+    // Détail des indicateurs
+    sheet.getRange(`A${row}`).setValue("Détail des indicateurs");
+    sheet.getRange(`A${row}`).setFontWeight("bold");
+    
+    row++;
+    
+    // En-têtes du tableau des indicateurs
+    sheet.getRange(`A${row}:D${row}`).setValues([
+      ["Indicateur", "Score", "Maximum", "Calculable"]
+    ]);
+    sheet.getRange(`A${row}:D${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+    
+    row++;
+    
+    // Indicateur 1
+    sheet.getRange(`A${row}`).setValue("1 - Écart de rémunération");
+    sheet.getRange(`B${row}`).setValue(indexEgalite.indicateur1.nonCalculable ? "N/A" : indexEgalite.indicateur1.score);
+    sheet.getRange(`C${row}`).setValue(40);
+    sheet.getRange(`D${row}`).setValue(indexEgalite.indicateur1.nonCalculable ? "Non" : "Oui");
+    
+    row++;
+    
+    // Indicateur 2
+    sheet.getRange(`A${row}`).setValue("2 - Écart de taux d'augmentation");
+    sheet.getRange(`B${row}`).setValue(indexEgalite.indicateur2.nonCalculable ? "N/A" : indexEgalite.indicateur2.score);
+    sheet.getRange(`C${row}`).setValue(20);
+    sheet.getRange(`D${row}`).setValue(indexEgalite.indicateur2.nonCalculable ? "Non" : "Oui");
+    
+    row++;
+    
+    // Indicateur 3
+    sheet.getRange(`A${row}`).setValue("3 - Écart de taux de promotion");
+    sheet.getRange(`B${row}`).setValue(indexEgalite.indicateur3.nonCalculable ? "N/A" : indexEgalite.indicateur3.score);
+    sheet.getRange(`C${row}`).setValue(15);
+    sheet.getRange(`D${row}`).setValue(indexEgalite.indicateur3.nonCalculable ? "Non" : "Oui");
+    
+    row++;
+    
+    // Indicateur 4
+    sheet.getRange(`A${row}`).setValue("4 - Retour de congé maternité");
+    sheet.getRange(`B${row}`).setValue(indexEgalite.indicateur4.nonCalculable ? "N/A" : indexEgalite.indicateur4.score);
+    sheet.getRange(`C${row}`).setValue(15);
+    sheet.getRange(`D${row}`).setValue(indexEgalite.indicateur4.nonCalculable ? "Non" : "Oui");
+    
+    row++;
+    
+    // Indicateur 5
+    sheet.getRange(`A${row}`).setValue("5 - 10 plus hautes rémunérations");
+    sheet.getRange(`B${row}`).setValue(indexEgalite.indicateur5.nonCalculable ? "N/A" : indexEgalite.indicateur5.score);
+    sheet.getRange(`C${row}`).setValue(10);
+    sheet.getRange(`D${row}`).setValue(indexEgalite.indicateur5.nonCalculable ? "Non" : "Oui");
+    
+    // Ajouter un espace après la section
+    row += 2;
+    
+    return row;
+  }
+  
+  /**
+   * Format une date au format français (dd/MM/yyyy)
+   * @private
+   * @param {Date} date - Date à formater
+   * @return {string} - Date formatée
+   */
+  function _formatDateFr(date) {
+    if (!date) return "";
+    return Utilities.formatDate(date, Session.getScriptTimeZone(), "dd/MM/yyyy");
+  }
   
   /**
    * Génère l'en-tête du rapport
@@ -555,9 +1260,9 @@ const DSNReportService = (function() {
     // Date du rapport
     sheet.getRange("A2:E2").merge();
     sheet.getRange("A2").setValue("Généré le " + 
-                                  Utilities.formatDate(new Date(), 
-                                                      Session.getScriptTimeZone(), 
-                                                      "dd/MM/yyyy à HH:mm"))
+                                 Utilities.formatDate(new Date(), 
+                                                    Session.getScriptTimeZone(), 
+                                                    "dd/MM/yyyy à HH:mm"))
       .setFontStyle("italic")
       .setHorizontalAlignment("center");
     
@@ -723,434 +1428,4 @@ const DSNReportService = (function() {
     
     row++;
     sheet.getRange(`A${row}`).setValue("Rémunération moyenne");
-    sheet.getRange(`B${row}`).setValue(data.global.remuneration.remunMoyenne)
-      .setNumberFormat("#,##0.00 €");
-    
-    row++;
-    sheet.getRange(`A${row}`).setValue("Rémunération médiane");
-    sheet.getRange(`B${row}`).setValue(data.global.remuneration.remunMediane)
-      .setNumberFormat("#,##0.00 €");
-    
-    row++;
-    sheet.getRange(`A${row}`).setValue("Écart salarial hommes/femmes");
-    sheet.getRange(`B${row}`).setValue(data.global.remuneration.ecartHommesFemmes / 100)
-      .setNumberFormat("0.00%");
-    
-    row += 2;
-    
-    // Rémunération par tranche d'âge
-    sheet.getRange(`A${row}`).setValue("Rémunération par tranche d'âge");
-    sheet.getRange(`A${row}`).setFontWeight("bold");
-    
-    row++;
-    
-    for (const tranche in data.global.remuneration.remunParTrancheAge) {
-      if (data.global.remuneration.remunParTrancheAge[tranche].count > 0) {
-        sheet.getRange(`A${row}`).setValue(tranche);
-        sheet.getRange(`B${row}`).setValue(data.global.remuneration.remunParTrancheAge[tranche].moyenne)
-          .setNumberFormat("#,##0.00 €");
-        row++;
-      }
-    }
-    
-    // Ajouter un espace après la section
-    row += 2;
-    
-    return row;
-  }
-  
-  /**
-   * Génère la section des contrats
-   * @private
-   * @param {Sheet} sheet - Feuille de calcul
-   * @param {number} startRow - Ligne de début
-   * @param {object} data - Données d'analyse
-   * @return {number} - Nouvelle ligne courante
-   */
-  function _generateContractSection(sheet, startRow, data) {
-    let row = startRow;
-    
-    // Titre de section
-    sheet.getRange(`A${row}:E${row}`).merge();
-    sheet.getRange(`A${row}`).setValue("ANALYSE DES CONTRATS")
-      .setBackground("#F1F3F4")
-      .setFontWeight("bold");
-    
-    row += 2;
-    
-    // Statistiques générales
-    sheet.getRange(`A${row}`).setValue("Répartition par type de contrat");
-    sheet.getRange(`A${row}`).setFontWeight("bold");
-    
-    row++;
-    for (const type in data.global.contrats.typesContrat) {
-      let label = type;
-      // Transformer les codes en libellés plus lisibles
-      if (type === "01") label = "CDI";
-      else if (type === "02") label = "CDD";
-      else if (type === "03") label = "Intérim";
-      else if (type === "07") label = "CDI intermittent";
-      else if (type === "08") label = "CDD intermittent";
-      
-      sheet.getRange(`A${row}`).setValue(label);
-      sheet.getRange(`B${row}`).setValue(data.global.contrats.typesContrat[type]);
-      sheet.getRange(`C${row}`).setValue(
-        data.global.contrats.total > 0 ? 
-        (data.global.contrats.typesContrat[type] / data.global.contrats.total) * 100 : 0
-      ).setNumberFormat("0.0%");
-      row++;
-    }
-    
-    row += 2;
-    
-    // Répartition temps plein / temps partiel
-    sheet.getRange(`A${row}`).setValue("Temps de travail");
-    sheet.getRange(`A${row}`).setFontWeight("bold");
-    
-    row++;
-    sheet.getRange(`A${row}`).setValue("Temps plein");
-    sheet.getRange(`B${row}`).setValue(data.global.contrats.tempPlein);
-    sheet.getRange(`C${row}`).setValue(
-      data.global.contrats.total > 0 ? 
-      (data.global.contrats.tempPlein / data.global.contrats.total) * 100 : 0
-    ).setNumberFormat("0.0%");
-    
-    row++;
-    sheet.getRange(`A${row}`).setValue("Temps partiel");
-    sheet.getRange(`B${row}`).setValue(data.global.contrats.tempsPartiel);
-    sheet.getRange(`C${row}`).setValue(
-      data.global.contrats.total > 0 ? 
-      (data.global.contrats.tempsPartiel / data.global.contrats.total) * 100 : 0
-    ).setNumberFormat("0.0%");
-    
-    // Ajouter un espace après la section
-    row += 2;
-    
-    return row;
-  }
-  
-  /**
-   * Génère la section des anomalies
-   * @private
-   * @param {Sheet} sheet - Feuille de calcul
-   * @param {number} startRow - Ligne de début
-   * @param {object} data - Données d'analyse
-   * @return {number} - Nouvelle ligne courante
-   */
-  function _generateAnomalySection(sheet, startRow, data) {
-    let row = startRow;
-    
-    // Titre de section
-    sheet.getRange(`A${row}:E${row}`).merge();
-    sheet.getRange(`A${row}`).setValue("ALERTES ET ANOMALIES")
-      .setBackground("#F1F3F4")
-      .setFontWeight("bold");
-    
-    row += 2;
-    
-    // Résumé des anomalies
-    sheet.getRange(`A${row}`).setValue("Résumé des anomalies détectées");
-    sheet.getRange(`A${row}`).setFontWeight("bold");
-    
-    row++;
-    
-    // Écarts salariaux
-    sheet.getRange(`A${row}`).setValue("Écarts salariaux significatifs");
-    sheet.getRange(`B${row}`).setValue(data.anomalies.ecartsSalariaux.length);
-    if (data.anomalies.ecartsSalariaux.length > 0) {
-      sheet.getRange(`B${row}`).setBackground("#F4C7C3"); // Fond rouge léger si anomalies
-    }
-    
-    row++;
-    
-    // Rémunérations anormales
-    sheet.getRange(`A${row}`).setValue("Rémunérations anormales");
-    sheet.getRange(`B${row}`).setValue(data.anomalies.remunerationAnormales.length);
-    if (data.anomalies.remunerationAnormales.length > 0) {
-      sheet.getRange(`B${row}`).setBackground("#F4C7C3"); // Fond rouge léger si anomalies
-    }
-    
-    row++;
-    
-    // Données incomplètes
-    sheet.getRange(`A${row}`).setValue("Fiches salariés incomplètes");
-    sheet.getRange(`B${row}`).setValue(data.anomalies.incompletes.length);
-    if (data.anomalies.incompletes.length > 0) {
-      sheet.getRange(`B${row}`).setBackground("#F4C7C3"); // Fond rouge léger si anomalies
-    }
-    
-    row += 2;
-    
-    // Détails des anomalies majeures
-    
-    if (data.anomalies.ecartsSalariaux.length > 0) {
-      sheet.getRange(`A${row}`).setValue("Détail des écarts salariaux significatifs");
-      sheet.getRange(`A${row}`).setFontWeight("bold");
-      
-      row++;
-      
-      // En-têtes du tableau
-      sheet.getRange(`A${row}`).setValue("Profil");
-      sheet.getRange(`B${row}`).setValue("Moyenne H");
-      sheet.getRange(`C${row}`).setValue("Moyenne F");
-      sheet.getRange(`D${row}`).setValue("Écart");
-      sheet.getRange(`E${row}`).setValue("Nb personnes");
-      
-      // Mise en forme des en-têtes
-      sheet.getRange(`A${row}:E${row}`).setFontWeight("bold").setBackground("#E0E0E0");
-      
-      row++;
-      
-      // Limiter à 5 anomalies pour ne pas surcharger le rapport
-      const topEcarts = data.anomalies.ecartsSalariaux.slice(0, 5);
-      
-      topEcarts.forEach(ecart => {
-        sheet.getRange(`A${row}`).setValue(ecart.profil);
-        sheet.getRange(`B${row}`).setValue(ecart.moyenneHommes).setNumberFormat("#,##0.00 €");
-        sheet.getRange(`C${row}`).setValue(ecart.moyenneFemmes).setNumberFormat("#,##0.00 €");
-        sheet.getRange(`D${row}`).setValue(ecart.ecartPourcentage / 100).setNumberFormat("0.00%");
-        sheet.getRange(`E${row}`).setValue(ecart.nbHommes + ecart.nbFemmes);
-        
-        // Mise en évidence des écarts importants
-        if (Math.abs(ecart.ecartPourcentage) > 20) {
-          sheet.getRange(`D${row}`).setBackground("#F4C7C3");
-        }
-        
-        row++;
-      });
-    }
-    
-    // Ajouter un espace après la section
-    row += 2;
-    
-    return row;
-  }
-  
-  /**
-   * Génère la section des tendances
-   * @private
-   * @param {Sheet} sheet - Feuille de calcul
-   * @param {number} startRow - Ligne de début
-   * @param {object} data - Données d'analyse
-   * @return {number} - Nouvelle ligne courante
-   */
-  function _generateTrendsSection(sheet, startRow, data) {
-    let row = startRow;
-    
-    if (data.tendances.effectifs.length <= 1) {
-      // Pas assez de données pour les tendances
-      return row;
-    }
-    
-    // Titre de section
-    sheet.getRange(`A${row}:E${row}`).merge();
-    sheet.getRange(`A${row}`).setValue("TENDANCES ET ÉVOLUTIONS")
-      .setBackground("#F1F3F4")
-      .setFontWeight("bold");
-    
-    row += 2;
-    
-    // Évolution des effectifs
-    sheet.getRange(`A${row}`).setValue("Évolution des effectifs");
-    sheet.getRange(`A${row}`).setFontWeight("bold");
-    
-    row++;
-    
-    // En-têtes du tableau
-    sheet.getRange(`A${row}`).setValue("Période");
-    sheet.getRange(`B${row}`).setValue("Total");
-    sheet.getRange(`C${row}`).setValue("Hommes");
-    sheet.getRange(`D${row}`).setValue("Femmes");
-    sheet.getRange(`E${row}`).setValue("Évolution");
-    
-    // Mise en forme des en-têtes
-    sheet.getRange(`A${row}:E${row}`).setFontWeight("bold").setBackground("#E0E0E0");
-    
-    row++;
-    
-    // Données d'évolution
-    for (let i = 0; i < data.tendances.effectifs.length; i++) {
-      const item = data.tendances.effectifs[i];
-      
-      sheet.getRange(`A${row}`).setValue(item.periode);
-      sheet.getRange(`B${row}`).setValue(item.total);
-      sheet.getRange(`C${row}`).setValue(item.hommes);
-      sheet.getRange(`D${row}`).setValue(item.femmes);
-      
-      // Calculer l'évolution par rapport au mois précédent
-      if (i > 0) {
-        const prevItem = data.tendances.effectifs[i-1];
-        const evol = prevItem.total > 0 ? 
-          ((item.total - prevItem.total) / prevItem.total) * 100 : 0;
-        
-        sheet.getRange(`E${row}`).setValue(evol / 100).setNumberFormat("+0.0%;-0.0%;0.0%");
-        
-        // Colorer selon l'évolution
-        if (evol > 5) {
-          sheet.getRange(`E${row}`).setBackground("#D9EAD3"); // Vert pour hausse
-        } else if (evol < -5) {
-          sheet.getRange(`E${row}`).setBackground("#F4C7C3"); // Rouge pour baisse
-        }
-      }
-      
-      row++;
-    }
-    
-    row += 2;
-    
-    // Évolution des salaires moyens
-    if (data.tendances.remuneration.length > 1) {
-      sheet.getRange(`A${row}`).setValue("Évolution des salaires moyens");
-      sheet.getRange(`A${row}`).setFontWeight("bold");
-      
-      row++;
-      
-      // En-têtes du tableau
-      sheet.getRange(`A${row}`).setValue("Période");
-      sheet.getRange(`B${row}`).setValue("Salaire moyen");
-      sheet.getRange(`C${row}`).setValue("Évolution");
-      
-      // Mise en forme des en-têtes
-      sheet.getRange(`A${row}:C${row}`).setFontWeight("bold").setBackground("#E0E0E0");
-      
-      row++;
-      
-      // Données d'évolution
-      for (let i = 0; i < data.tendances.remuneration.length; i++) {
-        const item = data.tendances.remuneration[i];
-        
-        sheet.getRange(`A${row}`).setValue(item.periode);
-        sheet.getRange(`B${row}`).setValue(item.moyenne).setNumberFormat("#,##0.00 €");
-        
-        // Calculer l'évolution par rapport au mois précédent
-        if (i > 0) {
-          const prevItem = data.tendances.remuneration[i-1];
-          const evol = prevItem.moyenne > 0 ? 
-            ((item.moyenne - prevItem.moyenne) / prevItem.moyenne) * 100 : 0;
-          
-          sheet.getRange(`C${row}`).setValue(evol / 100).setNumberFormat("+0.0%;-0.0%;0.0%");
-          
-          // Colorer selon l'évolution
-          if (evol > 2) {
-            sheet.getRange(`C${row}`).setBackground("#D9EAD3"); // Vert pour hausse
-          } else if (evol < -2) {
-            sheet.getRange(`C${row}`).setBackground("#F4C7C3"); // Rouge pour baisse
-          }
-        }
-        
-        row++;
-      }
-    }
-    
-    // Ajouter un espace après la section
-    row += 2;
-    
-    return row;
-  }
-  
-  /**
-   * Ajoute des graphiques au rapport
-   * @private
-   * @param {Sheet} sheet - Feuille de calcul
-   * @param {object} data - Données d'analyse
-   */
-  function _addCharts(sheet, data) {
-    // Seules les versions payantes de Google Sheets permettent de créer des graphiques via l'API
-    // Cette fonction est donc simplifiée
-    
-    // Ajouter une note sur les graphiques
-    const row = sheet.getLastRow() + 2;
-    
-    sheet.getRange(`A${row}:E${row}`).merge();
-    sheet.getRange(`A${row}`).setValue("Note : Les graphiques doivent être créés manuellement à partir des données ci-dessus. " +
-                                      "La création automatique de graphiques n'est pas disponible dans cette version.")
-      .setFontStyle("italic")
-      .setHorizontalAlignment("center");
-  }
-  
-  /**
-   * Formate la période de couverture
-   * @private
-   * @param {object} periode - Période avec debut et fin
-   * @return {string} - Période formatée
-   */
-  function _formatPeriode(periode) {
-    if (!periode.debut || !periode.fin) {
-      return "Période inconnue";
-    }
-    
-    return Utilities.formatDate(periode.debut, Session.getScriptTimeZone(), "MMMM yyyy") + 
-           " à " + 
-           Utilities.formatDate(periode.fin, Session.getScriptTimeZone(), "MMMM yyyy");
-  }
-  
-  /**
-   * Parse une date au format "YYYY-MM"
-   * @private
-   * @param {string} yearMonth - Date au format "YYYY-MM"
-   * @return {Date} - Objet Date correspondant
-   */
-  function _parseYearMonth(yearMonth) {
-    if (!yearMonth) return null;
-    
-    const parts = yearMonth.split("-");
-    if (parts.length === 2) {
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1; // Les mois commencent à 0 en JavaScript
-      
-      return new Date(year, month, 1);
-    }
-    
-    return null;
-  }
-  
-  /**
-   * Exportation manuelle en CSV (si ExportManager n'est pas disponible)
-   * @private
-   * @param {array} data - Données à exporter
-   * @return {string} - Contenu CSV
-   */
-  function _manualExportToCsv(data) {
-    if (!data || !data.length) return "";
-    
-    const delimiter = ",";
-    const headers = Object.keys(data[0]);
-    
-    // Construire les lignes
-    let csvContent = headers.join(delimiter) + "\n";
-    
-    // Ajouter les données
-    data.forEach(item => {
-      const values = headers.map(header => {
-        let value = item[header];
-        
-        // Gérer les valeurs null/undefined
-        if (value === null || value === undefined) {
-          return "";
-        }
-        
-        // Échapper les guillemets et entourer de guillemets si nécessaire
-        value = String(value);
-        if (value.includes(delimiter) || value.includes("\n") || value.includes("\"")) {
-          value = "\"" + value.replace(/"/g, "\"\"") + "\"";
-        }
-        
-        return value;
-      });
-      
-      csvContent += values.join(delimiter) + "\n";
-    });
-    
-    return csvContent;
-  }
-  
-  // API publique
-  return {
-    generateSpreadsheetReport,
-    generatePDFReport,
-    generateCSVReport,
-    generateGenderPayGapReport,
-    generateContractEndingsReport,
-    generateJSONDump
-  };
-})();
+    sheet.getRange(`
