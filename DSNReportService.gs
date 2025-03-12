@@ -1428,4 +1428,581 @@ const DSNReportService = (function() {
     
     row++;
     sheet.getRange(`A${row}`).setValue("Rémunération moyenne");
-    sheet.getRange(`
+    sheet.getRange(`B${row}`).setValue(data.global.remuneration.remunMoyenne)
+      .setNumberFormat("#,##0.00 €");
+    
+    row++;
+    sheet.getRange(`A${row}`).setValue("Rémunération médiane");
+    sheet.getRange(`B${row}`).setValue(data.global.remuneration.remunMediane)
+      .setNumberFormat("#,##0.00 €");
+    
+    row++;
+    sheet.getRange(`A${row}`).setValue("Rémunération minimum");
+    sheet.getRange(`B${row}`).setValue(data.global.remuneration.remunMin)
+      .setNumberFormat("#,##0.00 €");
+    
+    row++;
+    sheet.getRange(`A${row}`).setValue("Rémunération maximum");
+    sheet.getRange(`B${row}`).setValue(data.global.remuneration.remunMax)
+      .setNumberFormat("#,##0.00 €");
+    
+    row += 2;
+    
+    // Écart salarial hommes/femmes
+    sheet.getRange(`A${row}`).setValue("Écart salarial hommes/femmes");
+    sheet.getRange(`A${row}`).setFontWeight("bold");
+    
+    row++;
+    sheet.getRange(`A${row}`).setValue("Écart global");
+    sheet.getRange(`B${row}`).setValue(data.global.remuneration.ecartHommesFemmes / 100)
+      .setNumberFormat("0.00%");
+    
+    // Colorer l'écart selon son importance
+    if (Math.abs(data.global.remuneration.ecartHommesFemmes) > 20) {
+      sheet.getRange(`B${row}`).setBackground("#FFCDD2"); // Rouge clair (écart important)
+    } else if (Math.abs(data.global.remuneration.ecartHommesFemmes) > 10) {
+      sheet.getRange(`B${row}`).setBackground("#FFF9C4"); // Jaune clair (écart moyen)
+    } else {
+      sheet.getRange(`B${row}`).setBackground("#C8E6C9"); // Vert clair (écart faible)
+    }
+    
+    row += 2;
+    
+    // Rémunération par tranche d'âge
+    sheet.getRange(`A${row}`).setValue("Rémunération par tranche d'âge");
+    sheet.getRange(`A${row}`).setFontWeight("bold");
+    
+    row++;
+    sheet.getRange(`A${row}:C${row}`).setValues([
+      ["Tranche d'âge", "Rémunération moyenne", "Écart avec la moyenne globale"]
+    ]);
+    sheet.getRange(`A${row}:C${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+    
+    row++;
+    for (const tranche in data.global.remuneration.remunParTrancheAge) {
+      const donnees = data.global.remuneration.remunParTrancheAge[tranche];
+      const ecart = donnees.moyenne && data.global.remuneration.remunMoyenne ?
+        ((donnees.moyenne - data.global.remuneration.remunMoyenne) / data.global.remuneration.remunMoyenne) * 100 : 0;
+      
+      sheet.getRange(`A${row}`).setValue(tranche);
+      sheet.getRange(`B${row}`).setValue(donnees.moyenne).setNumberFormat("#,##0.00 €");
+      sheet.getRange(`C${row}`).setValue(ecart / 100).setNumberFormat("0.00%");
+      
+      row++;
+    }
+    
+    // Ajouter un espace après la section
+    row += 2;
+    
+    return row;
+  }
+  
+  /**
+   * Génère la section des contrats
+   * @private
+   * @param {Sheet} sheet - Feuille de calcul
+   * @param {number} startRow - Ligne de début
+   * @param {object} data - Données d'analyse
+   * @return {number} - Nouvelle ligne courante
+   */
+  function _generateContractSection(sheet, startRow, data) {
+    let row = startRow;
+    
+    // Titre de section
+    sheet.getRange(`A${row}:E${row}`).merge();
+    sheet.getRange(`A${row}`).setValue("ANALYSE DES CONTRATS")
+      .setBackground("#F1F3F4")
+      .setFontWeight("bold");
+    
+    row += 2;
+    
+    // Répartition par type de contrat
+    sheet.getRange(`A${row}`).setValue("Répartition par type de contrat");
+    sheet.getRange(`A${row}`).setFontWeight("bold");
+    
+    row++;
+    sheet.getRange(`A${row}:C${row}`).setValues([
+      ["Type de contrat", "Nombre", "Pourcentage"]
+    ]);
+    sheet.getRange(`A${row}:C${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+    
+    row++;
+    const nbContrats = data.global.contrats.total;
+    
+    for (const type in data.global.contrats.typesContrat) {
+      let libelle = type;
+      // Transformer les codes en libellés plus lisibles
+      if (type === "01") libelle = "CDI";
+      else if (type === "02") libelle = "CDD";
+      else if (type === "03") libelle = "Intérim";
+      else if (type === "07") libelle = "Contrat à durée indéterminée intermittent";
+      else if (type === "08") libelle = "Contrat à durée déterminée intermittent";
+      else if (type === "09") libelle = "Contrat de travail temporaire";
+      else if (type === "10") libelle = "Contrat de travail saisonnier";
+      
+      const nombre = data.global.contrats.typesContrat[type];
+      const pourcentage = nbContrats > 0 ? (nombre / nbContrats) * 100 : 0;
+      
+      sheet.getRange(`A${row}`).setValue(libelle);
+      sheet.getRange(`B${row}`).setValue(nombre);
+      sheet.getRange(`C${row}`).setValue(pourcentage / 100).setNumberFormat("0.0%");
+      
+      row++;
+    }
+    
+    row++;
+    
+    // Temps plein vs temps partiel
+    sheet.getRange(`A${row}`).setValue("Temps plein vs temps partiel");
+    sheet.getRange(`A${row}`).setFontWeight("bold");
+    
+    row++;
+    sheet.getRange(`A${row}:C${row}`).setValues([
+      ["Type", "Nombre", "Pourcentage"]
+    ]);
+    sheet.getRange(`A${row}:C${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+    
+    row++;
+    const tempPlein = data.global.contrats.tempPlein;
+    const tempsPartiel = data.global.contrats.tempsPartiel;
+    
+    sheet.getRange(`A${row}`).setValue("Temps plein");
+    sheet.getRange(`B${row}`).setValue(tempPlein);
+    sheet.getRange(`C${row}`).setValue(nbContrats > 0 ? (tempPlein / nbContrats) * 100 : 0).setNumberFormat("0.0%");
+    
+    row++;
+    sheet.getRange(`A${row}`).setValue("Temps partiel");
+    sheet.getRange(`B${row}`).setValue(tempsPartiel);
+    sheet.getRange(`C${row}`).setValue(nbContrats > 0 ? (tempsPartiel / nbContrats) * 100 : 0).setNumberFormat("0.0%");
+    
+    // Ajouter un espace après la section
+    row += 2;
+    
+    return row;
+  }
+  
+  /**
+   * Génère la section des anomalies
+   * @private
+   * @param {Sheet} sheet - Feuille de calcul
+   * @param {number} startRow - Ligne de début
+   * @param {object} data - Données d'analyse
+   * @return {number} - Nouvelle ligne courante
+   */
+  function _generateAnomalySection(sheet, startRow, data) {
+    let row = startRow;
+    
+    // Titre de section
+    sheet.getRange(`A${row}:E${row}`).merge();
+    sheet.getRange(`A${row}`).setValue("ALERTES ET ANOMALIES")
+      .setBackground("#F1F3F4")
+      .setFontWeight("bold");
+    
+    row += 2;
+    
+    // Écarts salariaux significatifs
+    sheet.getRange(`A${row}`).setValue("Écarts salariaux significatifs entre hommes et femmes");
+    sheet.getRange(`A${row}`).setFontWeight("bold");
+    
+    if (data.anomalies.ecartsSalariaux.length > 0) {
+      row++;
+      sheet.getRange(`A${row}:E${row}`).setValues([
+        ["Profil", "Moyenne Hommes", "Moyenne Femmes", "Écart (%)", "Effectifs"]
+      ]);
+      sheet.getRange(`A${row}:E${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+      
+      row++;
+      data.anomalies.ecartsSalariaux.forEach(ecart => {
+        sheet.getRange(`A${row}`).setValue(ecart.profil);
+        sheet.getRange(`B${row}`).setValue(ecart.moyenneHommes).setNumberFormat("#,##0.00 €");
+        sheet.getRange(`C${row}`).setValue(ecart.moyenneFemmes).setNumberFormat("#,##0.00 €");
+        sheet.getRange(`D${row}`).setValue(ecart.ecartPourcentage / 100).setNumberFormat("0.00%");
+        sheet.getRange(`E${row}`).setValue(`H: ${ecart.nbHommes}, F: ${ecart.nbFemmes}`);
+        
+        // Colorer l'écart selon son importance
+        if (ecart.ecartPourcentage > 20) {
+          sheet.getRange(`D${row}`).setBackground("#FFCDD2"); // Rouge clair (écart important)
+        } else if (ecart.ecartPourcentage > 10) {
+          sheet.getRange(`D${row}`).setBackground("#FFF9C4"); // Jaune clair (écart moyen)
+        }
+        
+        row++;
+      });
+    } else {
+      row++;
+      sheet.getRange(`A${row}`).setValue("Aucun écart significatif détecté");
+      row++;
+    }
+    
+    row++;
+    
+    // Rémunérations anormales
+    sheet.getRange(`A${row}`).setValue("Rémunérations anormales par rapport à la moyenne du profil");
+    sheet.getRange(`A${row}`).setFontWeight("bold");
+    
+    if (data.anomalies.remunerationAnormales.length > 0) {
+      row++;
+      sheet.getRange(`A${row}:E${row}`).setValues([
+        ["Nom", "Prénom", "Profil", "Rémunération", "Écart (%)"]
+      ]);
+      sheet.getRange(`A${row}:E${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+      
+      row++;
+      data.anomalies.remunerationAnormales.forEach(anomalie => {
+        sheet.getRange(`A${row}`).setValue(anomalie.nom);
+        sheet.getRange(`B${row}`).setValue(anomalie.prenom);
+        sheet.getRange(`C${row}`).setValue(anomalie.profil);
+        sheet.getRange(`D${row}`).setValue(anomalie.remuneration).setNumberFormat("#,##0.00 €");
+        sheet.getRange(`E${row}`).setValue(anomalie.ecartPourcentage / 100).setNumberFormat("0.00%");
+        
+        // Colorer l'écart selon son importance
+        if (Math.abs(anomalie.ecartPourcentage) > 50) {
+          sheet.getRange(`E${row}`).setBackground("#FFCDD2"); // Rouge clair (écart très important)
+        } else if (Math.abs(anomalie.ecartPourcentage) > 30) {
+          sheet.getRange(`E${row}`).setBackground("#FFF9C4"); // Jaune clair (écart important)
+        }
+        
+        row++;
+      });
+    } else {
+      row++;
+      sheet.getRange(`A${row}`).setValue("Aucune rémunération anormale détectée");
+      row++;
+    }
+    
+    row++;
+    
+    // Données incomplètes
+    sheet.getRange(`A${row}`).setValue("Données incomplètes");
+    sheet.getRange(`A${row}`).setFontWeight("bold");
+    
+    if (data.anomalies.incompletes.length > 0) {
+      row++;
+      sheet.getRange(`A${row}:C${row}`).setValues([
+        ["Nom", "Prénom", "Champs manquants"]
+      ]);
+      sheet.getRange(`A${row}:C${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+      
+      row++;
+      data.anomalies.incompletes.forEach(donnee => {
+        sheet.getRange(`A${row}`).setValue(donnee.nom);
+        sheet.getRange(`B${row}`).setValue(donnee.prenom);
+        sheet.getRange(`C${row}`).setValue(donnee.champsManquants.join(", "));
+        
+        row++;
+      });
+    } else {
+      row++;
+      sheet.getRange(`A${row}`).setValue("Aucune donnée incomplète détectée");
+      row++;
+    }
+    
+    // Ajouter un espace après la section
+    row += 2;
+    
+    return row;
+  }
+  
+  /**
+   * Génère la section des tendances
+   * @private
+   * @param {Sheet} sheet - Feuille de calcul
+   * @param {number} startRow - Ligne de début
+   * @param {object} data - Données d'analyse
+   * @return {number} - Nouvelle ligne courante
+   */
+  function _generateTrendsSection(sheet, startRow, data) {
+    let row = startRow;
+    
+    // Vérifier si des tendances sont disponibles
+    if (!data.tendances || 
+        (!data.tendances.effectifs.length && 
+         !data.tendances.remuneration.length && 
+         !data.tendances.absences.length)) {
+      return row; // Pas de tendances disponibles
+    }
+    
+    // Titre de section
+    sheet.getRange(`A${row}:E${row}`).merge();
+    sheet.getRange(`A${row}`).setValue("ÉVOLUTION ET TENDANCES")
+      .setBackground("#F1F3F4")
+      .setFontWeight("bold");
+    
+    row += 2;
+    
+    // Évolution des effectifs
+    if (data.tendances.effectifs.length > 0) {
+      sheet.getRange(`A${row}`).setValue("Évolution des effectifs");
+      sheet.getRange(`A${row}`).setFontWeight("bold");
+      
+      row++;
+      sheet.getRange(`A${row}:D${row}`).setValues([
+        ["Période", "Total", "Hommes", "Femmes"]
+      ]);
+      sheet.getRange(`A${row}:D${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+      
+      row++;
+      data.tendances.effectifs.forEach(item => {
+        sheet.getRange(`A${row}`).setValue(item.periode);
+        sheet.getRange(`B${row}`).setValue(item.total);
+        sheet.getRange(`C${row}`).setValue(item.hommes);
+        sheet.getRange(`D${row}`).setValue(item.femmes);
+        
+        row++;
+      });
+      
+      row++;
+    }
+    
+    // Évolution des rémunérations
+    if (data.tendances.remuneration.length > 0) {
+      sheet.getRange(`A${row}`).setValue("Évolution des rémunérations");
+      sheet.getRange(`A${row}`).setFontWeight("bold");
+      
+      row++;
+      sheet.getRange(`A${row}:C${row}`).setValues([
+        ["Période", "Rémunération moyenne", "Masse salariale"]
+      ]);
+      sheet.getRange(`A${row}:C${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+      
+      row++;
+      data.tendances.remuneration.forEach(item => {
+        sheet.getRange(`A${row}`).setValue(item.periode);
+        sheet.getRange(`B${row}`).setValue(item.moyenne).setNumberFormat("#,##0.00 €");
+        sheet.getRange(`C${row}`).setValue(item.total).setNumberFormat("#,##0.00 €");
+        
+        row++;
+      });
+      
+      row++;
+    }
+    
+    // Évolution des absences
+    if (data.tendances.absences.length > 0) {
+      sheet.getRange(`A${row}`).setValue("Évolution des absences");
+      sheet.getRange(`A${row}`).setFontWeight("bold");
+      
+      row++;
+      sheet.getRange(`A${row}:C${row}`).setValues([
+        ["Période", "Jours d'absence", "Taux d'absence"]
+      ]);
+      sheet.getRange(`A${row}:C${row}`).setFontWeight("bold").setBackground("#F3F3F3");
+      
+      row++;
+      data.tendances.absences.forEach(item => {
+        sheet.getRange(`A${row}`).setValue(item.periode);
+        sheet.getRange(`B${row}`).setValue(item.totalJours);
+        sheet.getRange(`C${row}`).setValue(item.tauxAbsence / 100).setNumberFormat("0.00%");
+        
+        row++;
+      });
+    }
+    
+    // Ajouter un espace après la section
+    row += 2;
+    
+    return row;
+  }
+  
+  /**
+   * Ajoute des graphiques au rapport
+   * @private
+   * @param {Sheet} sheet - Feuille de calcul
+   * @param {object} data - Données d'analyse
+   */
+  function _addCharts(sheet, data) {
+    // Vérifier si suffisamment de données sont disponibles pour les graphiques
+    if (!data.global || !data.global.effectifs) return;
+    
+    try {
+      // 1. Graphique de répartition hommes/femmes
+      const sexChartData = sheet.getRange("A14:C15"); // Supposons que ces cellules contiennent les données H/F
+      const sexChart = sheet.newChart()
+        .setChartType(Charts.ChartType.PIE)
+        .addRange(sexChartData)
+        .setPosition(5, 7, 0, 0)
+        .setOption("title", "Répartition par sexe")
+        .setOption("pieSliceText", "percentage")
+        .setOption("legend", { position: "right" })
+        .setOption("width", 400)
+        .setOption("height", 300)
+        .build();
+      
+      sheet.insertChart(sexChart);
+      
+      // 2. Graphique de répartition par tranche d'âge
+      // Trouver les lignes contenant les données de tranches d'âge
+      const lastRow = sheet.getLastRow();
+      let ageDataStartRow = 0;
+      for (let i = 10; i < 30; i++) {
+        if (sheet.getRange(`A${i}`).getValue() === "Répartition par tranche d'âge") {
+          ageDataStartRow = i + 2; // +2 pour sauter l'en-tête
+          break;
+        }
+      }
+      
+      if (ageDataStartRow > 0) {
+        // Calculer le nombre de tranches d'âge
+        let ageCount = 0;
+        for (const tranche in data.global.effectifs.repartitionAge) {
+          ageCount++;
+        }
+        
+        if (ageCount > 0) {
+          const ageChartData = sheet.getRange(ageDataStartRow, 1, ageCount, 2);
+          const ageChart = sheet.newChart()
+            .setChartType(Charts.ChartType.COLUMN)
+            .addRange(ageChartData)
+            .setPosition(5, 7, 500, 0) // Position à droite du premier graphique
+            .setOption("title", "Effectifs par tranche d'âge")
+            .setOption("legend", { position: "none" })
+            .setOption("hAxis", { title: "Tranche d'âge" })
+            .setOption("vAxis", { title: "Nombre de salariés" })
+            .setOption("width", 400)
+            .setOption("height", 300)
+            .build();
+          
+          sheet.insertChart(ageChart);
+        }
+      }
+      
+      // 3. Graphique d'évolution des rémunérations si disponible
+      if (data.tendances && data.tendances.remuneration.length > 0) {
+        // Trouver les lignes contenant les données d'évolution des rémunérations
+        let remuDataStartRow = 0;
+        for (let i = 50; i < 150; i++) {
+          if (i >= lastRow) break;
+          if (sheet.getRange(`A${i}`).getValue() === "Évolution des rémunérations") {
+            remuDataStartRow = i + 2; // +2 pour sauter l'en-tête
+            break;
+          }
+        }
+        
+        if (remuDataStartRow > 0) {
+          const remuCount = data.tendances.remuneration.length;
+          if (remuCount > 0) {
+            const remuChartData = sheet.getRange(remuDataStartRow, 1, remuCount, 2);
+            const remuChart = sheet.newChart()
+              .setChartType(Charts.ChartType.LINE)
+              .addRange(remuChartData)
+              .setPosition(20, 7, 0, 0) // Position en bas du rapport
+              .setOption("title", "Évolution de la rémunération moyenne")
+              .setOption("legend", { position: "none" })
+              .setOption("hAxis", { title: "Période" })
+              .setOption("vAxis", { title: "Rémunération moyenne (€)" })
+              .setOption("width", 500)
+              .setOption("height", 300)
+              .build();
+            
+            sheet.insertChart(remuChart);
+          }
+        }
+      }
+      
+      // 4. Graphique des types de contrats si disponible
+      // Trouver les lignes contenant les données de types de contrats
+      let contratDataStartRow = 0;
+      for (let i = 30; i < 100; i++) {
+        if (i >= lastRow) break;
+        if (sheet.getRange(`A${i}`).getValue() === "Répartition par type de contrat") {
+          contratDataStartRow = i + 2; // +2 pour sauter l'en-tête
+          break;
+        }
+      }
+      
+      if (contratDataStartRow > 0) {
+        // Compter le nombre de types de contrats
+        let typesCount = 0;
+        for (const type in data.global.contrats.typesContrat) {
+          typesCount++;
+        }
+        
+        if (typesCount > 0) {
+          const contratChartData = sheet.getRange(contratDataStartRow, 1, typesCount, 2);
+          const contratChart = sheet.newChart()
+            .setChartType(Charts.ChartType.PIE)
+            .addRange(contratChartData)
+            .setPosition(20, 7, 600, 0) // Position à droite du graphique de rémunération
+            .setOption("title", "Répartition par type de contrat")
+            .setOption("pieSliceText", "percentage")
+            .setOption("legend", { position: "right" })
+            .setOption("width", 400)
+            .setOption("height", 300)
+            .build();
+          
+          sheet.insertChart(contratChart);
+        }
+      }
+    } catch (e) {
+      Logger.log("Erreur lors de la création des graphiques: " + e.toString());
+    }
+  }
+  
+  /**
+   * Formate une période de dates
+   * @private
+   * @param {object} periode - Objet contenant les dates debut et fin
+   * @return {string} - Période formatée
+   */
+  function _formatPeriode(periode) {
+    if (!periode || !periode.debut || !periode.fin) {
+      return "Période non définie";
+    }
+    
+    const debut = Utilities.formatDate(periode.debut, Session.getScriptTimeZone(), "MMMM yyyy");
+    const fin = Utilities.formatDate(periode.fin, Session.getScriptTimeZone(), "MMMM yyyy");
+    
+    return debut + " à " + fin;
+  }
+  
+  /**
+   * Export manuel en CSV
+   * @private
+   * @param {array} data - Données à exporter
+   * @return {string} - Contenu CSV
+   */
+  function _manualExportToCsv(data) {
+    let csv = "section,libelle,valeur\n";
+    
+    data.forEach(row => {
+      const section = _escapeCsvValue(row.section || "");
+      const libelle = _escapeCsvValue(row.libelle || "");
+      const valeur = _escapeCsvValue(row.valeur || "");
+      
+      csv += `${section},${libelle},${valeur}\n`;
+    });
+    
+    return csv;
+  }
+  
+  /**
+   * Échappe les valeurs pour le CSV
+   * @private
+   * @param {string} value - Valeur à échapper
+   * @return {string} - Valeur échappée
+   */
+  function _escapeCsvValue(value) {
+    if (typeof value !== "string") {
+      value = String(value);
+    }
+    
+    // Si la valeur contient une virgule, des guillemets ou un saut de ligne, l'entourer de guillemets
+    if (value.includes(",") || value.includes("\"") || value.includes("\n")) {
+      // Doubler les guillemets existants
+      value = value.replace(/"/g, "\"\"");
+      return `"${value}"`;
+    }
+    
+    return value;
+  }
+  
+  return {
+    generateSpreadsheetReport,
+    generatePDFReport,
+    generateCSVReport,
+    generateEqualityIndexReport,
+    generateEqualityIndexCertificate,
+    generateGenderPayGapReport,
+    exportDashboardToSheet
+  };
+})();
