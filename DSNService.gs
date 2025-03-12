@@ -117,6 +117,7 @@ const DSNService = (function() {
     
     dsnFiles.forEach((dsnText, index) => {
       try {
+        // Utiliser le parser 2025
         const parsedModel = DSNParser2025.parseDSNContent(dsnText);
         
         // Extraire le mois et l'année à partir du moisPrincipal
@@ -546,7 +547,7 @@ const DSNService = (function() {
     return natures[code] || code || "Non spécifié";
   }
   
-  /**
+/**
    * Récupère le libellé pour un type de rémunération
    * @private
    * @param {string} code - Code type de rémunération
@@ -612,4 +613,4 @@ const DSNService = (function() {
     importAndAnalyzeLocalDSN,
     storeParsedDSNToSheets
   };
-})();
+})();  
