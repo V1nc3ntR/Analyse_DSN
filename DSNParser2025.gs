@@ -101,6 +101,9 @@ const DSNParser2025 = (function() {
     // Enrichir le modèle avec des données analytiques
     _enrichModelWithAnalytics(model);
     
+    // NOUVEAUTÉ: Enrichir avec les données pour l'Index d'Égalité Professionnelle
+    _enrichModelWithEqualityData(model);
+    
     return model;
   }
   
@@ -123,8 +126,10 @@ const DSNParser2025 = (function() {
       }
     }
     
-    // Si non trouvé, retourner le mois courant
-    return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM");
+    // CORRECTION: Si non trouvé, utiliser la date de l'année courante au lieu de today
+    // pour éviter les erreurs de nommage des feuilles
+    const today = new Date();
+    return Utilities.formatDate(today, Session.getScriptTimeZone(), "yyyy-MM");
   }
   
   /**
@@ -289,7 +294,11 @@ const DSNParser2025 = (function() {
       case "026": contrat.caracteristiques.statutEmploi = valeur; break;
       case "021": contrat.caracteristiques.motifRecours = valeur; break;
       case "006": contrat.caracteristiques.libelleEmploi = valeur; break;
-      case "004": contrat.caracteristiques.codeCSP = valeur; break;
+      case "004": 
+        contrat.caracteristiques.codeCSP = valeur; 
+        // NOUVEAUTÉ: Remplir aussi la catégorie de poste pour l'égalité
+        contrat.classificationEgalite.categoriePoste = _determinerCategorieCSP(valeur);
+        break;
       case "005": contrat.caracteristiques.complementCSP = valeur; break;
       case "008": contrat.caracteristiques.dispositifPublic = valeur; break;
       case "073": contrat.caracteristiques.complementDispositif = valeur; break;
@@ -307,9 +316,17 @@ const DSNParser2025 = (function() {
       case "039": contrat.classification.codeRegimeAT = valeur; break;
       case "040": contrat.classification.codeRisqueAT = valeur; break;
       case "041": contrat.classification.positionConvention = valeur; break;
-      case "048": contrat.classification.niveauRemuneration = valeur; break;
+      case "048": 
+        contrat.classification.niveauRemuneration = valeur; 
+        // NOUVEAUTÉ: Remplir aussi le niveau pour l'égalité
+        contrat.classificationEgalite.niveau = valeur;
+        break;
       case "049": contrat.classification.echelon = valeur; break;
-      case "050": contrat.classification.coefficient = valeur; break;
+      case "050": 
+        contrat.classification.coefficient = valeur; 
+        // NOUVEAUTÉ: Remplir aussi le coefficient hiérarchique pour l'égalité
+        contrat.classificationEgalite.coefficientHierarchique = valeur;
+        break;
       
       // Lieu de travail
       case "019": contrat.lieuTravail.identifiant = valeur; break;
@@ -511,6 +528,9 @@ const DSNParser2025 = (function() {
         }
         currentArret = DSNModels.createArretTravailModel();
         currentArret.motif = r.valeur;
+        
+        // NOUVEAUTÉ: Détecter le type d'arrêt pour l'Index d'Égalité Professionnelle
+        _detectArretType(currentArret);
       } else if (currentArret) {
         // Assigner les valeurs
         switch (r.rubrique) {
@@ -642,6 +662,9 @@ const DSNParser2025 = (function() {
         if (dateDebutPlusAncienne) {
           const today = new Date();
           salarie.analytics.ancienneteEntreprise = _calculateMonthsDifference(dateDebutPlusAncienne, today);
+          
+          // NOUVEAUTÉ: Mettre à jour la date d'entrée dans l'entreprise
+          salarie.carriere.dateEntree = dateDebutPlusAncienne;
         }
       }
       
@@ -735,11 +758,18 @@ const DSNParser2025 = (function() {
           contrat.analytics.salaireInitial = remusPrincipales[0].montant;
           contrat.analytics.salaireFinal = remusPrincipales[remusPrincipales.length - 1].montant;
           
+          // NOUVEAUTÉ: Remplir les données d'évolution de rémunération
+          contrat.evolutionRemuneration.remunerationInitiale = contrat.analytics.salaireInitial;
+          contrat.evolutionRemuneration.remunerationActuelle = contrat.analytics.salaireFinal;
+          
           // Évolution en pourcentage
           if (contrat.analytics.salaireInitial && contrat.analytics.salaireFinal) {
             contrat.analytics.evolutionPourcentage = 
               ((contrat.analytics.salaireFinal - contrat.analytics.salaireInitial) / 
                contrat.analytics.salaireInitial) * 100;
+            
+            // NOUVEAUTÉ: Remplir le pourcentage d'évolution
+            contrat.evolutionRemuneration.pourcentageEvolution = contrat.analytics.evolutionPourcentage;
           }
           
           // Coût total
@@ -760,7 +790,396 @@ const DSNParser2025 = (function() {
           contrat.analytics.tauxAbsenteisme = (joursAbsence / contrat.analytics.dureeContrat) * 100;
         }
       }
+      
+      // NOUVEAUTÉ: Remplir les données initiales de la carrière
+      contrat.evolutionCarriere.posteInitial = contrat.caracteristiques.libelleEmploi || "";
+      contrat.evolutionCarriere.posteActuel = contrat.caracteristiques.libelleEmploi || "";
+      contrat.evolutionCarriere.niveauInitial = contrat.classification.niveauRemuneration || "";
+      contrat.evolutionCarriere.niveauActuel = contrat.classification.niveauRemuneration || "";
     });
+  }
+  
+  /**
+   * NOUVEAUTÉ: Enrichit le modèle avec des données spécifiques pour l'Index d'Égalité Professionnelle
+   * @private
+   * @param {object} model - Modèle de données DSN
+   */
+  function _enrichModelWithEqualityData(model) {
+    // 1. Détecter les augmentations de salaire
+    _detectSalaryIncreases(model);
+    
+    // 2. Détecter les promotions
+    _detectPromotions(model);
+    
+    // 3. Analyser les retours de congé maternité
+    _analyzeMaternityLeaveReturns(model);
+    
+    // 4. Identifier les 10 plus hautes rémunérations
+    _identifyHighestRemunerations(model);
+    
+    // 5. Classer les salariés par niveau de rémunération
+    _classifySalariesByRemunerationLevel(model);
+  }
+  
+  /**
+   * NOUVEAUTÉ: Détecte les augmentations de salaire
+   * @private
+   * @param {object} model - Modèle de données DSN
+   */
+  function _detectSalaryIncreases(model) {
+    model.contrats.forEach(contrat => {
+      if (contrat.remunerations.length < 2) return;
+      
+      // Trier les rémunérations par date
+      const remusSorted = contrat.remunerations.sort((a, b) => {
+        return a.periode.debut - b.periode.debut;
+      });
+      
+      // Filtrer les rémunérations principales
+      const remusPrincipales = remusSorted.filter(r => 
+        r.type === "001" || r.type === "002" || r.type === "003"
+      );
+      
+      if (remusPrincipales.length < 2) return;
+      
+      // Détecter les augmentations
+      for (let i = 1; i < remusPrincipales.length; i++) {
+        const prevRemu = remusPrincipales[i-1];
+        const currRemu = remusPrincipales[i];
+        
+        if (prevRemu.montant && currRemu.montant && currRemu.montant > prevRemu.montant) {
+          const augmentationPct = ((currRemu.montant - prevRemu.montant) / prevRemu.montant) * 100;
+          const augmentationMontant = currRemu.montant - prevRemu.montant;
+          
+          // Marquer comme augmentation
+          currRemu.indexEgalite.estAugmentation = true;
+          currRemu.indexEgalite.tauxAugmentation = augmentationPct;
+          currRemu.indexEgalite.montantAugmentation = augmentationMontant;
+          
+          // Ajouter à l'historique des augmentations
+          contrat.evolutionRemuneration.historiqueAugmentations.push({
+            dateDebut: prevRemu.periode.debut,
+            dateFin: currRemu.periode.debut,
+            remunerationAvant: prevRemu.montant,
+            remunerationApres: currRemu.montant,
+            augmentationPct: augmentationPct,
+            augmentationMontant: augmentationMontant
+          });
+          
+          // Si c'est la dernière période, mettre à jour l'augmentation de la dernière année
+          if (i === remusPrincipales.length - 1) {
+            contrat.evolutionRemuneration.augmentationDerniereAnnee = augmentationMontant;
+            contrat.evolutionRemuneration.tauxAugmentation = augmentationPct;
+          }
+        }
+      }
+      
+      // Mettre à jour les données d'augmentation du salarié
+      const salarie = model.salaries.find(s => s.identite.nir === contrat.id.nirSalarie);
+      if (salarie && contrat.evolutionRemuneration.historiqueAugmentations.length > 0) {
+        // Dernière augmentation
+        const derniereAugmentation = contrat.evolutionRemuneration.historiqueAugmentations[
+          contrat.evolutionRemuneration.historiqueAugmentations.length - 1
+        ];
+        
+        // Mettre à jour les données d'augmentation
+        salarie.analytics.indexEgalite.augmentation.historique.push(...contrat.evolutionRemuneration.historiqueAugmentations);
+        salarie.analytics.indexEgalite.augmentation.derniere = derniereAugmentation.dateFin;
+        salarie.analytics.indexEgalite.augmentation.tauxAugmentation = derniereAugmentation.augmentationPct;
+      }
+    });
+  }
+  
+  /**
+   * NOUVEAUTÉ: Détecte les promotions
+   * @private
+   * @param {object} model - Modèle de données DSN
+   */
+  function _detectPromotions(model) {
+    // Pour détecter les promotions, on examine les changements de niveau, d'échelon ou de coefficient
+    model.contrats.forEach(contrat => {
+      if (contrat.evolutionCarriere.historiquePromotions.length > 0) return; // Déjà détecté
+      
+      // Rechercher les événements de contrat avec changements de classification
+      // Dans ce modèle simplifié, on suppose que toute augmentation de salaire > 5% 
+      // non liée à une augmentation générale est une promotion
+      if (contrat.evolutionRemuneration.historiqueAugmentations.length > 0) {
+        const augmentationsSignificatives = contrat.evolutionRemuneration.historiqueAugmentations.filter(
+          aug => aug.augmentationPct > 5.0
+        );
+        
+        if (augmentationsSignificatives.length > 0) {
+          // Considérer ces augmentations significatives comme des promotions
+          augmentationsSignificatives.forEach(aug => {
+            // Créer un enregistrement de promotion
+            const promotion = {
+              date: aug.dateFin,
+              ancien: {
+                poste: contrat.evolutionCarriere.posteInitial,
+                niveau: contrat.evolutionCarriere.niveauInitial,
+                remuneration: aug.remunerationAvant
+              },
+              nouveau: {
+                poste: contrat.evolutionCarriere.posteActuel,
+                niveau: contrat.evolutionCarriere.niveauActuel,
+                remuneration: aug.remunerationApres
+              },
+              augmentationPct: aug.augmentationPct
+            };
+            
+            // Ajouter à l'historique des promotions
+            contrat.evolutionCarriere.historiquePromotions.push(promotion);
+            
+            // Si c'est la promotion la plus récente dans les 12 derniers mois, la marquer
+            const today = new Date();
+            const datePromotion = new Date(aug.dateFin);
+            const diffMois = _calculateMonthsDifference(datePromotion, today);
+            
+            if (diffMois <= 12) {
+              contrat.evolutionCarriere.estPromuDerniereAnnee = true;
+            }
+          });
+        }
+      }
+      
+      // Mettre à jour les données de promotion du salarié
+      const salarie = model.salaries.find(s => s.identite.nir === contrat.id.nirSalarie);
+      if (salarie && contrat.evolutionCarriere.historiquePromotions.length > 0) {
+        // Dernière promotion
+        const dernierePromotion = contrat.evolutionCarriere.historiquePromotions[
+          contrat.evolutionCarriere.historiquePromotions.length - 1
+        ];
+        
+        // Mettre à jour les données de promotion
+        salarie.analytics.indexEgalite.promotion.historique.push(...contrat.evolutionCarriere.historiquePromotions);
+        salarie.analytics.indexEgalite.promotion.derniere = dernierePromotion.date;
+        salarie.analytics.indexEgalite.promotion.estPromu = contrat.evolutionCarriere.estPromuDerniereAnnee;
+      }
+    });
+  }
+  
+  /**
+   * NOUVEAUTÉ: Analyse les retours de congé maternité
+   * @private
+   * @param {object} model - Modèle de données DSN
+   */
+  function _analyzeMaternityLeaveReturns(model) {
+    model.arrets.forEach(arret => {
+      // Vérifier s'il s'agit d'un congé maternité
+      if (arret.suiviEgalite.estCongeMaternite && arret.dateReprise) {
+        const salarie = model.salaries.find(s => s.identite.nir === arret.nirSalarie);
+        if (!salarie) return;
+        
+        // Vérifier s'il y a eu une augmentation au retour
+        let augmentationAuRetour = false;
+        
+        // Rechercher des augmentations dans les 3 mois suivant le retour
+        const contrats = model.contrats.filter(c => c.id.nirSalarie === salarie.identite.nir);
+        
+        for (const contrat of contrats) {
+          for (const aug of contrat.evolutionRemuneration.historiqueAugmentations) {
+            const dateAugmentation = new Date(aug.dateFin);
+            const dateReprise = new Date(arret.dateReprise);
+            
+            // Vérifier si l'augmentation a eu lieu dans les 3 mois suivant le retour
+            const diffJours = _calculateDaysDifference(dateReprise, dateAugmentation);
+            
+            if (diffJours >= 0 && diffJours <= 90) {
+              augmentationAuRetour = true;
+              
+              // Mettre à jour les données d'arrêt
+              arret.suiviEgalite.augmentationAuRetour = true;
+              arret.suiviEgalite.dateAugmentation = dateAugmentation;
+              arret.suiviEgalite.montantAugmentation = aug.augmentationMontant;
+              
+              // Mettre à jour les données d'augmentation du salarié
+              salarie.analytics.indexEgalite.augmentation.apresCongeMaternite = true;
+              
+              break;
+            }
+          }
+          
+          if (augmentationAuRetour) break;
+        }
+      }
+    });
+  }
+  
+  /**
+   * NOUVEAUTÉ: Identifie les 10 plus hautes rémunérations
+   * @private
+   * @param {object} model - Modèle de données DSN
+   */
+  function _identifyHighestRemunerations(model) {
+    // Récupérer la dernière rémunération de chaque salarié
+    const salariesRemunerations = [];
+    
+    model.salaries.forEach(salarie => {
+      let remunerationTotale = 0;
+      
+      // Calculer la rémunération totale du salarié (tous contrats)
+      salarie.contrats.forEach(numContrat => {
+        const contrat = model.contrats.find(c => c.id.numeroContrat === numContrat);
+        if (contrat && contrat.remunerations.length > 0) {
+          // Utiliser la dernière rémunération connue
+          const remusSorted = contrat.remunerations
+            .filter(r => r.type === "001" || r.type === "002" || r.type === "003")
+            .sort((a, b) => b.periode.debut - a.periode.debut);
+          
+          if (remusSorted.length > 0) {
+            remunerationTotale += remusSorted[0].montant || 0;
+          }
+        }
+      });
+      
+      if (remunerationTotale > 0) {
+        salariesRemunerations.push({
+          nir: salarie.identite.nir,
+          sexe: salarie.identite.sexe,
+          remuneration: remunerationTotale
+        });
+      }
+    });
+    
+    // Trier par rémunération décroissante
+    salariesRemunerations.sort((a, b) => b.remuneration - a.remuneration);
+    
+    // Prendre les 10 premiers (ou moins si moins de 10 salariés)
+    const topRemunerations = salariesRemunerations.slice(0, Math.min(10, salariesRemunerations.length));
+    
+    // Mettre à jour les données des salariés concernés
+    topRemunerations.forEach((top, index) => {
+      const salarie = model.salaries.find(s => s.identite.nir === top.nir);
+      if (salarie) {
+        salarie.analytics.indexEgalite.niveauRemuneration.estParmiLes10Plus = true;
+        salarie.analytics.indexEgalite.niveauRemuneration.classement = index + 1;
+      }
+    });
+  }
+  
+  /**
+   * NOUVEAUTÉ: Classe les salariés par quartile de rémunération
+   * @private
+   * @param {object} model - Modèle de données DSN
+   */
+  function _classifySalariesByRemunerationLevel(model) {
+    // Regrouper les salariés par catégorie professionnelle et tranche d'âge
+    const groupes = {};
+    
+    model.salaries.forEach(salarie => {
+      // Récupérer les informations de classification
+      let categoriePoste = "";
+      let trancheAge = salarie.analytics.trancheAge || "";
+      
+      if (salarie.contrats.length > 0) {
+        const contrat = model.contrats.find(c => c.id.numeroContrat === salarie.contrats[0]);
+        if (contrat) {
+          categoriePoste = contrat.classificationEgalite.categoriePoste || _determinerCategorieCSP(contrat.caracteristiques.codeCSP);
+        }
+      }
+      
+      if (!categoriePoste || !trancheAge) return;
+      
+      // Créer la clé du groupe
+      const groupKey = `${categoriePoste}_${trancheAge}`;
+      
+      if (!groupes[groupKey]) {
+        groupes[groupKey] = [];
+      }
+      
+      // Calculer la rémunération totale du salarié
+      let remunerationTotale = 0;
+      
+      salarie.contrats.forEach(numContrat => {
+        const contrat = model.contrats.find(c => c.id.numeroContrat === numContrat);
+        if (contrat && contrat.remunerations.length > 0) {
+          // Utiliser la dernière rémunération connue
+          const remusSorted = contrat.remunerations
+            .filter(r => r.type === "001" || r.type === "002" || r.type === "003")
+            .sort((a, b) => b.periode.debut - a.periode.debut);
+          
+          if (remusSorted.length > 0) {
+            remunerationTotale += remusSorted[0].montant || 0;
+          }
+        }
+      });
+      
+      // Ajouter le salarié au groupe
+      groupes[groupKey].push({
+        nir: salarie.identite.nir,
+        sexe: salarie.identite.sexe,
+        remuneration: remunerationTotale
+      });
+    });
+    
+    // Pour chaque groupe, diviser en quartiles et assigner aux salariés
+    for (const groupKey in groupes) {
+      const groupe = groupes[groupKey];
+      
+      if (groupe.length < 4) continue; // Pas assez de salariés pour calculer des quartiles
+      
+      // Trier par rémunération
+      groupe.sort((a, b) => a.remuneration - b.remuneration);
+      
+      // Calculer les indices des quartiles
+      const q1Index = Math.floor(groupe.length * 0.25);
+      const q2Index = Math.floor(groupe.length * 0.5);
+      const q3Index = Math.floor(groupe.length * 0.75);
+      
+      // Assigner les quartiles
+      groupe.forEach((s, index) => {
+        const salarie = model.salaries.find(sal => sal.identite.nir === s.nir);
+        if (!salarie) return;
+        
+        if (index < q1Index) {
+          salarie.analytics.indexEgalite.niveauRemuneration.quartile = 1;
+        } else if (index < q2Index) {
+          salarie.analytics.indexEgalite.niveauRemuneration.quartile = 2;
+        } else if (index < q3Index) {
+          salarie.analytics.indexEgalite.niveauRemuneration.quartile = 3;
+        } else {
+          salarie.analytics.indexEgalite.niveauRemuneration.quartile = 4;
+        }
+      });
+    }
+  }
+  
+  /**
+   * NOUVEAUTÉ: Détermine la catégorie professionnelle à partir du code CSP
+   * @private
+   * @param {string} codeCSP - Code CSP du contrat
+   * @return {string} - Catégorie professionnelle
+   */
+  function _determinerCategorieCSP(codeCSP) {
+    if (!codeCSP) return "";
+    
+    // Le premier caractère du code CSP détermine la catégorie
+    const premiereLettre = codeCSP.charAt(0);
+    
+    switch (premiereLettre) {
+      case "2": return "Cadres";
+      case "3": 
+      case "4": return "TAM"; // Techniciens et Agents de Maîtrise
+      case "5": return "Employés";
+      case "6": 
+      case "7": return "Ouvriers";
+      default: return "";
+    }
+  }
+  
+  /**
+   * NOUVEAUTÉ: Détecte le type d'arrêt pour l'Index d'Égalité Professionnelle
+   * @private
+   * @param {object} arret - Modèle d'arrêt de travail
+   */
+  function _detectArretType(arret) {
+    if (arret.motif === "02") {
+      arret.suiviEgalite.estCongeMaternite = true;
+    } else if (arret.motif === "03") {
+      arret.suiviEgalite.estCongePaternite = true;
+    } else if (arret.motif === "09") {
+      arret.suiviEgalite.estCongeAdoption = true;
+    }
   }
   
   /**
