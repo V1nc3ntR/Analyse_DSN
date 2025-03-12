@@ -72,7 +72,10 @@ const DSNAnalysisService = (function() {
           indexEgalite: null,
           ecartSalarial: 0
         }
-      }
+      },
+      
+      // NOUVEAUTÉ: Index d'égalité professionnelle
+      indexEgalite: DSNModels.createIndexEgaliteModel()
     };
     
     // Stocker tous les salariés et contrats pour analyse
@@ -101,6 +104,10 @@ const DSNAnalysisService = (function() {
         }
       }
     });
+    
+    // NOUVEAUTÉ: Définir la période de référence pour l'index d'égalité
+    report.indexEgalite.metadata.periodeReference.debut = report.global.periodeCouverte.debut;
+    report.indexEgalite.metadata.periodeReference.fin = report.global.periodeCouverte.fin;
     
     // Premier passage pour collecter tous les salariés uniques par NIR
     dsnDataArray.forEach(dsn => {
@@ -143,6 +150,11 @@ const DSNAnalysisService = (function() {
         report.global.effectifs.repartitionAge[salarie.analytics.trancheAge]++;
       }
     }
+    
+    // NOUVEAUTÉ: Mettre à jour les effectifs pour l'Index Égalité
+    report.indexEgalite.metadata.effectifTotal = report.global.effectifs.total;
+    report.indexEgalite.metadata.effectifHommes = report.global.effectifs.hommes;
+    report.indexEgalite.metadata.effectifFemmes = report.global.effectifs.femmes;
     
     // Calculer la parité
     if (report.global.effectifs.total > 0) {
@@ -445,6 +457,9 @@ const DSNAnalysisService = (function() {
       });
     }
     
+    // NOUVEAUTÉ: Calculer les indicateurs de l'Index d'Égalité Professionnelle
+    _calculerIndexEgaliteProfessionnelle(report, allSalaries, allContrats);
+    
     return report;
   }
   
@@ -477,10 +492,10 @@ const DSNAnalysisService = (function() {
       },
       
       graphiques: {
-        effectifs: _prepareDashboardData(analysis.tendances.effectifs, 'total', 'période'),
+        effectifs: _prepareDashboardData(analysis.tendances.effectifs, 'total', 'periode'),
         repartitionSexe: _prepareGenderDistributionData(analysis.global.effectifs),
         pyramideAges: _preparePyramidAgeData(analysis.gepp.pyramideAges),
-        evolutionRemuneration: _prepareDashboardData(analysis.tendances.remuneration, 'moyenne', 'période'),
+        evolutionRemuneration: _prepareDashboardData(analysis.tendances.remuneration, 'moyenne', 'periode'),
         typesContrat: _prepareContractTypesData(analysis.global.contrats.typesContrat)
       },
       
@@ -494,10 +509,36 @@ const DSNAnalysisService = (function() {
         debut: analysis.global.periodeCouverte.debut,
         fin: analysis.global.periodeCouverte.fin,
         formatted: _formatPeriode(analysis.global.periodeCouverte)
-      }
+      },
+      
+      // NOUVEAUTÉ: Index égalité professionnelle
+      indexEgalite: analysis.indexEgalite
     };
     
     return dashboard;
+  }
+  
+  /**
+   * NOUVEAUTÉ: Génère un rapport spécifique pour l'Index d'Égalité Professionnelle
+   * @param {array} dsnDataArray - Tableau de données DSN au format 2025
+   * @return {object} - Rapport d'Index d'Égalité Professionnelle
+   */
+  function generateEqualityIndexReport(dsnDataArray) {
+    // Effectuer l'analyse complète
+    const analysis = analyzeAllDSN(dsnDataArray);
+    
+    // Extraire uniquement les données de l'index d'égalité
+    return {
+      indexEgalite: analysis.indexEgalite,
+      periodeReference: _formatPeriode(analysis.global.periodeCouverte),
+      effectifs: {
+        total: analysis.global.effectifs.total,
+        hommes: analysis.global.effectifs.hommes,
+        femmes: analysis.global.effectifs.femmes,
+        tauxFeminisation: analysis.gepp.indicateursParite.tauxFeminisation
+      },
+      ecartGlobalRemuneration: analysis.global.remuneration.ecartHommesFemmes
+    };
   }
   
   /**
@@ -659,7 +700,7 @@ const DSNAnalysisService = (function() {
     const remuParMois = {};
     
     dsnDataArray.forEach(dsn => {
-      const mois = dsn.moisPrincipal;
+      const moisPrincipal = dsn.moisPrincipal;
       
       // Récupérer le salarié
       const salarie = dsn.salaries.find(s => s.identite.nir === nir);
@@ -684,7 +725,7 @@ const DSNAnalysisService = (function() {
         });
         
         if (remuTotal > 0) {
-          remuParMois[mois] = remuTotal;
+          remuParMois[moisPrincipal] = remuTotal;
         }
       }
     });
@@ -768,8 +809,8 @@ const DSNAnalysisService = (function() {
     const absencesParMois = {};
     
     dsnDataArray.forEach(dsn => {
-      const mois = dsn.moisPrincipal;
-      const moisDate = _parseYearMonth(mois);
+      const moisPrincipal = dsn.moisPrincipal;
+      const moisDate = _parseYearMonth(moisPrincipal);
       const joursDansMois = new Date(moisDate.getFullYear(), moisDate.getMonth() + 1, 0).getDate();
       
       // Récupérer le salarié
@@ -788,8 +829,8 @@ const DSNAnalysisService = (function() {
         const arrets = dsn.arrets.filter(a => a.nirSalarie === nir);
         
         // Initialiser le compteur pour ce mois
-        if (!absencesParMois[mois]) {
-          absencesParMois[mois] = 0;
+        if (!absencesParMois[moisPrincipal]) {
+          absencesParMois[moisPrincipal] = 0;
         }
         
         // Ajouter les arrêts
@@ -808,7 +849,7 @@ const DSNAnalysisService = (function() {
             
             // Mettre à jour les statistiques
             analyse.stats.totalJours += duree;
-            absencesParMois[mois] += duree;
+            absencesParMois[moisPrincipal] += duree;
             
             // Mettre à jour la répartition par motif
             if (!analyse.stats.repartitionParMotif[arret.motif]) {
@@ -853,6 +894,719 @@ const DSNAnalysisService = (function() {
     });
     
     return analyse;
+  }
+  
+  /**
+   * NOUVEAUTÉ: Analyse spécifique des données pour l'index d'égalité professionnelle
+   * @param {array} dsnDataArray - Tableau de données DSN au format 2025
+   * @return {object} - Rapport Index d'Égalité Professionnelle
+   */
+  function analyzeEqualityIndex(dsnDataArray) {
+    // Créer un nouveau modèle d'Index d'Égalité
+    const indexEgalite = DSNModels.createIndexEgaliteModel();
+    
+    // Récupérer tous les salariés et contrats
+    const allSalaries = {};
+    const allContrats = {};
+    
+    dsnDataArray.forEach(dsn => {
+      dsn.salaries.forEach(salarie => {
+        if (!allSalaries[salarie.identite.nir]) {
+          allSalaries[salarie.identite.nir] = salarie;
+        }
+      });
+      
+      dsn.contrats.forEach(contrat => {
+        const key = `${contrat.id.nirSalarie}_${contrat.id.numeroContrat}`;
+        if (!allContrats[key]) {
+          allContrats[key] = contrat;
+        }
+      });
+    });
+    
+    // Déterminer la période de référence
+    let debut = null;
+    let fin = null;
+    
+    dsnDataArray.forEach(dsn => {
+      if (dsn.moisPrincipal) {
+        const moisDate = _parseYearMonth(dsn.moisPrincipal);
+        
+        if (!debut || moisDate < debut) {
+          debut = moisDate;
+        }
+        
+        if (!fin || moisDate > fin) {
+          fin = moisDate;
+        }
+      }
+    });
+    
+    indexEgalite.metadata.periodeReference.debut = debut;
+    indexEgalite.metadata.periodeReference.fin = fin;
+    
+    // Calculer les effectifs
+    const effectifTotal = Object.keys(allSalaries).length;
+    let effectifHommes = 0;
+    let effectifFemmes = 0;
+    
+    for (const nir in allSalaries) {
+      const salarie = allSalaries[nir];
+      
+      if (salarie.identite.sexe === "01") { // Homme
+        effectifHommes++;
+      } else if (salarie.identite.sexe === "02") { // Femme
+        effectifFemmes++;
+      }
+    }
+    
+    indexEgalite.metadata.effectifTotal = effectifTotal;
+    indexEgalite.metadata.effectifHommes = effectifHommes;
+    indexEgalite.metadata.effectifFemmes = effectifFemmes;
+    
+    // Calculer les indicateurs de l'Index d'Égalité Professionnelle
+    _calculerIndicateursIndexEgalite(indexEgalite, allSalaries, allContrats);
+    
+    return {
+      indexEgalite: indexEgalite,
+      periodeReference: {
+        debut: debut,
+        fin: fin
+      },
+      effectifs: {
+        total: effectifTotal,
+        hommes: effectifHommes,
+        femmes: effectifFemmes
+      }
+    };
+  }
+  
+  // ===== NOUVEAUTÉ: Fonctions pour l'Index d'Égalité Professionnelle =====
+  
+  /**
+   * Calcule les indicateurs de l'Index d'Égalité Professionnelle
+   * @private
+   * @param {object} report - Rapport d'analyse
+   * @param {object} allSalaries - Map des salariés
+   * @param {object} allContrats - Map des contrats
+   */
+  function _calculerIndexEgaliteProfessionnelle(report, allSalaries, allContrats) {
+    const indexEgalite = report.indexEgalite;
+    
+    // 1. Calculer l'indicateur d'écart de rémunération (40 points)
+    _calculerIndicateur1_EcartRemuneration(indexEgalite, allSalaries, allContrats);
+    
+    // 2. Calculer l'indicateur d'écart de taux d'augmentation (20 points)
+    _calculerIndicateur2_EcartAugmentation(indexEgalite, allSalaries, allContrats);
+    
+    // 3. Calculer l'indicateur d'écart de taux de promotion (15 points)
+    _calculerIndicateur3_EcartPromotion(indexEgalite, allSalaries, allContrats);
+    
+    // 4. Calculer l'indicateur de retour de congé maternité (15 points)
+    _calculerIndicateur4_RetourCongeMaternite(indexEgalite, allSalaries, allContrats);
+    
+    // 5. Calculer l'indicateur des 10 plus hautes rémunérations (10 points)
+    _calculerIndicateur5_PlusHautesRemunerations(indexEgalite, allSalaries, allContrats);
+    
+    // Calculer le résultat global
+    _calculerResultatGlobalIndexEgalite(indexEgalite);
+  }
+  
+  /**
+   * Calcule les indicateurs de l'Index d'Égalité Professionnelle directement
+   * @private
+   * @param {object} indexEgalite - Modèle d'Index d'Égalité
+   * @param {object} allSalaries - Map des salariés
+   * @param {object} allContrats - Map des contrats
+   */
+  function _calculerIndicateursIndexEgalite(indexEgalite, allSalaries, allContrats) {
+    // 1. Calculer l'indicateur d'écart de rémunération (40 points)
+    _calculerIndicateur1_EcartRemuneration(indexEgalite, allSalaries, allContrats);
+    
+    // 2. Calculer l'indicateur d'écart de taux d'augmentation (20 points)
+    _calculerIndicateur2_EcartAugmentation(indexEgalite, allSalaries, allContrats);
+    
+    // 3. Calculer l'indicateur d'écart de taux de promotion (15 points)
+    _calculerIndicateur3_EcartPromotion(indexEgalite, allSalaries, allContrats);
+    
+    // 4. Calculer l'indicateur de retour de congé maternité (15 points)
+    _calculerIndicateur4_RetourCongeMaternite(indexEgalite, allSalaries, allContrats);
+    
+    // 5. Calculer l'indicateur des 10 plus hautes rémunérations (10 points)
+    _calculerIndicateur5_PlusHautesRemunerations(indexEgalite, allSalaries, allContrats);
+    
+    // Calculer le résultat global
+    _calculerResultatGlobalIndexEgalite(indexEgalite);
+  }
+  
+  /**
+   * Calcule l'indicateur 1: Écart de rémunération entre les femmes et les hommes (40 points)
+   * @private
+   * @param {object} indexEgalite - Modèle d'Index d'Égalité
+   * @param {object} allSalaries - Map des salariés
+   * @param {object} allContrats - Map des contrats
+   */
+  function _calculerIndicateur1_EcartRemuneration(indexEgalite, allSalaries, allContrats) {
+    // Regrouper les salariés par catégorie professionnelle et tranche d'âge
+    const groupes = {};
+    
+    // Parcourir tous les salariés
+    for (const nir in allSalaries) {
+      const salarie = allSalaries[nir];
+      
+      // Obtenir la catégorie professionnelle et la tranche d'âge
+      let categoriePoste = "";
+      const trancheAge = salarie.analytics.trancheAge;
+      
+      if (!trancheAge) continue;
+      
+      // Récupérer la catégorie professionnelle à partir des contrats
+      if (salarie.contrats.length > 0) {
+        for (const numContrat of salarie.contrats) {
+          const contratKey = Object.keys(allContrats).find(k => k.includes(numContrat));
+          if (contratKey) {
+            const contrat = allContrats[contratKey];
+            if (contrat && contrat.classificationEgalite.categoriePoste) {
+              categoriePoste = contrat.classificationEgalite.categoriePoste;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!categoriePoste) continue;
+      
+      // Créer la clé du groupe
+      const groupKey = `${categoriePoste}_${trancheAge}`;
+      
+      if (!groupes[groupKey]) {
+        groupes[groupKey] = {
+          categoriePoste: categoriePoste,
+          trancheAge: trancheAge,
+          hommes: [],
+          femmes: [],
+          effectifHommes: 0,
+          effectifFemmes: 0,
+          remuMoyenneHommes: 0,
+          remuMoyenneFemmes: 0,
+          ecartRemuneration: 0
+        };
+      }
+      
+      // Calculer la rémunération moyenne du salarié
+      let remunerationTotale = 0;
+      let nbRemunerations = 0;
+      
+      for (const numContrat of salarie.contrats) {
+        const contratKey = Object.keys(allContrats).find(k => k.includes(numContrat));
+        if (contratKey) {
+          const contrat = allContrats[contratKey];
+          if (contrat && contrat.remunerations.length > 0) {
+            const remusPrincipales = contrat.remunerations.filter(r => 
+              r.type === "001" || r.type === "002" || r.type === "003"
+            );
+            
+            if (remusPrincipales.length > 0) {
+              for (const remu of remusPrincipales) {
+                if (remu.montant) {
+                  remunerationTotale += remu.montant;
+                  nbRemunerations++;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      const remunerationMoyenne = nbRemunerations > 0 ? remunerationTotale / nbRemunerations : 0;
+      
+      if (remunerationMoyenne <= 0) continue;
+      
+      // Ajouter le salarié au groupe selon son sexe
+      if (salarie.identite.sexe === "01") { // Homme
+        groupes[groupKey].hommes.push({
+          nir: nir,
+          remuneration: remunerationMoyenne
+        });
+        groupes[groupKey].effectifHommes++;
+      } else if (salarie.identite.sexe === "02") { // Femme
+        groupes[groupKey].femmes.push({
+          nir: nir,
+          remuneration: remunerationMoyenne
+        });
+        groupes[groupKey].effectifFemmes++;
+      }
+    }
+    
+    // Calculer les écarts de rémunération pour chaque groupe
+    let tauxSexesCompares = 0;
+    let populationComparable = 0;
+    let ecartGlobalPondere = 0;
+    
+    // Parcourir tous les groupes
+    for (const groupKey in groupes) {
+      const groupe = groupes[groupKey];
+      
+      // Vérifier si le groupe est valide (au moins 3 hommes et 3 femmes)
+      if (groupe.effectifHommes >= 3 && groupe.effectifFemmes >= 3) {
+        // Calculer la rémunération moyenne pour les hommes
+        const totalRemuHommes = groupe.hommes.reduce((sum, h) => sum + h.remuneration, 0);
+        groupe.remuMoyenneHommes = totalRemuHommes / groupe.effectifHommes;
+        
+        // Calculer la rémunération moyenne pour les femmes
+        const totalRemuFemmes = groupe.femmes.reduce((sum, f) => sum + f.remuneration, 0);
+        groupe.remuMoyenneFemmes = totalRemuFemmes / groupe.effectifFemmes;
+        
+        // Calculer l'écart de rémunération en pourcentage
+        if (groupe.remuMoyenneHommes > 0) {
+          groupe.ecartRemuneration = (groupe.remuMoyenneHommes - groupe.remuMoyenneFemmes) / groupe.remuMoyenneHommes * 100;
+        }
+        
+        // Ajouter aux groupes comparables
+        tauxSexesCompares++;
+        populationComparable += groupe.effectifHommes + groupe.effectifFemmes;
+        
+        // Calculer la pondération pour ce groupe
+        const poidsGroupe = (groupe.effectifHommes + groupe.effectifFemmes) / indexEgalite.metadata.effectifTotal;
+        
+        // Ajouter à l'écart global pondéré
+        ecartGlobalPondere += groupe.ecartRemuneration * poidsGroupe;
+        
+        // Ajouter aux catégories détaillées de l'indicateur
+        indexEgalite.indicateur1.parCategorie.push({
+          categorie: groupe.categoriePoste,
+          trancheAge: groupe.trancheAge,
+          effectifHommes: groupe.effectifHommes,
+          effectifFemmes: groupe.effectifFemmes,
+          remuHommes: groupe.remuMoyenneHommes,
+          remuFemmes: groupe.remuMoyenneFemmes,
+          ecart: groupe.ecartRemuneration,
+          poids: poidsGroupe
+        });
+      }
+    }
+    
+    // Calculer le taux de groupes comparables
+    if (Object.keys(groupes).length > 0) {
+      indexEgalite.indicateur1.tauxSexesCompares = (tauxSexesCompares / Object.keys(groupes).length) * 100;
+      indexEgalite.indicateur1.populationComparable = populationComparable;
+    }
+    
+    // Vérifier si l'indicateur est calculable
+    if (tauxSexesCompares === 0 || populationComparable < indexEgalite.metadata.effectifTotal * 0.4) {
+      indexEgalite.indicateur1.nonCalculable = true;
+      indexEgalite.indicateur1.motifNonCalculable = "Effectifs comparables insuffisants";
+    } else {
+      // Calculer l'écart global pondéré
+      indexEgalite.indicateur1.ecartGlobal = ecartGlobalPondere;
+      indexEgalite.indicateur1.ecartRemuneration = ecartGlobalPondere;
+      
+      // Calculer le score sur 40 points
+      // Selon la formule: 40 - (ecartGlobal * 100 / 20)
+      let score = 40 - Math.abs(ecartGlobalPondere) * 2;
+      
+      // Si l'écart est inférieur à 0%, score maximum
+      if (ecartGlobalPondere <= 0) {
+        score = 40;
+      }
+      
+      // Si le score est négatif, on le met à 0
+      score = Math.max(0, Math.round(score));
+      
+      indexEgalite.indicateur1.score = score;
+    }
+  }
+  
+  /**
+   * Calcule l'indicateur 2: Écart de taux d'augmentation (20 points)
+   * @private
+   * @param {object} indexEgalite - Modèle d'Index d'Égalité
+   * @param {object} allSalaries - Map des salariés
+   * @param {object} allContrats - Map des contrats
+   */
+  function _calculerIndicateur2_EcartAugmentation(indexEgalite, allSalaries, allContrats) {
+    // Compter les hommes et femmes ayant reçu une augmentation
+    let hommesAugmentes = 0;
+    let femmesAugmentees = 0;
+    let hommesTotal = 0;
+    let femmesTotal = 0;
+    
+    // Parcourir tous les salariés
+    for (const nir in allSalaries) {
+      const salarie = allSalaries[nir];
+      
+      // Ne considérer que les salariés avec au moins un an d'ancienneté
+      if (!salarie.carriere.dateEntree) continue;
+      
+      const dateEntree = new Date(salarie.carriere.dateEntree);
+      const dateFin = indexEgalite.metadata.periodeReference.fin || new Date();
+      const anciennete = _calculateMonthsDifference(dateEntree, dateFin);
+      
+      if (anciennete < 12) continue;
+      
+      // Déterminer si le salarié a reçu une augmentation
+      let aReçuAugmentation = false;
+      
+      if (salarie.analytics.indexEgalite.augmentation.historique.length > 0) {
+        // Vérifier si au moins une augmentation a eu lieu durant la période de référence
+        const periodeDebut = indexEgalite.metadata.periodeReference.debut;
+        const periodeFin = indexEgalite.metadata.periodeReference.fin;
+        
+        for (const aug of salarie.analytics.indexEgalite.augmentation.historique) {
+          const dateAugmentation = new Date(aug.dateFin);
+          
+          if (dateAugmentation >= periodeDebut && dateAugmentation <= periodeFin) {
+            aReçuAugmentation = true;
+            break;
+          }
+        }
+      }
+      
+      // Incrémenter les compteurs selon le sexe
+      if (salarie.identite.sexe === "01") { // Homme
+        hommesTotal++;
+        if (aReçuAugmentation) {
+          hommesAugmentes++;
+        }
+      } else if (salarie.identite.sexe === "02") { // Femme
+        femmesTotal++;
+        if (aReçuAugmentation) {
+          femmesAugmentees++;
+        }
+      }
+    }
+    
+    // Vérifier si l'indicateur est calculable
+    if (hommesTotal < 10 || femmesTotal < 10) {
+      indexEgalite.indicateur2.nonCalculable = true;
+      indexEgalite.indicateur2.motifNonCalculable = "Effectifs insuffisants";
+    } else {
+      // Calculer les taux d'augmentation
+      const tauxHommes = (hommesAugmentes / hommesTotal) * 100;
+      const tauxFemmes = (femmesAugmentees / femmesTotal) * 100;
+      
+      // Calculer l'écart de taux d'augmentation en points de pourcentage
+      const ecartTaux = tauxHommes - tauxFemmes;
+      
+      // Calculer le score sur 20 points
+      let score = 20;
+      
+      // Si l'écart est en défaveur des femmes
+      if (ecartTaux > 0) {
+        // Selon la formule: 20 - (écart * 5)
+        score = 20 - (ecartTaux * 5);
+        
+        // Si le score est négatif, on le met à 0
+        score = Math.max(0, Math.round(score));
+      }
+      
+      // Mettre à jour l'indicateur
+      indexEgalite.indicateur2.nombreHommes = hommesTotal;
+      indexEgalite.indicateur2.nombreFemmes = femmesTotal;
+      indexEgalite.indicateur2.nombreAugmentesHommes = hommesAugmentes;
+      indexEgalite.indicateur2.nombreAugmenteesFemmes = femmesAugmentees;
+      indexEgalite.indicateur2.tauxAugmentationHommes = tauxHommes;
+      indexEgalite.indicateur2.tauxAugmentationFemmes = tauxFemmes;
+      indexEgalite.indicateur2.ecartTauxAugmentation = ecartTaux;
+      indexEgalite.indicateur2.score = score;
+    }
+  }
+  
+  /**
+   * Calcule l'indicateur 3: Écart de taux de promotion (15 points)
+   * @private
+   * @param {object} indexEgalite - Modèle d'Index d'Égalité
+   * @param {object} allSalaries - Map des salariés
+   * @param {object} allContrats - Map des contrats
+   */
+  function _calculerIndicateur3_EcartPromotion(indexEgalite, allSalaries, allContrats) {
+    // Compter les hommes et femmes ayant reçu une promotion
+    let hommesPromus = 0;
+    let femmesPromues = 0;
+    let hommesTotal = 0;
+    let femmesTotal = 0;
+    
+    // Parcourir tous les salariés
+    for (const nir in allSalaries) {
+      const salarie = allSalaries[nir];
+      
+      // Ne considérer que les salariés avec au moins un an d'ancienneté
+      if (!salarie.carriere.dateEntree) continue;
+      
+      const dateEntree = new Date(salarie.carriere.dateEntree);
+      const dateFin = indexEgalite.metadata.periodeReference.fin || new Date();
+      const anciennete = _calculateMonthsDifference(dateEntree, dateFin);
+      
+      if (anciennete < 12) continue;
+      
+      // Déterminer si le salarié a reçu une promotion
+      let aReçuPromotion = false;
+      
+      if (salarie.analytics.indexEgalite.promotion.historique.length > 0) {
+        // Vérifier si au moins une promotion a eu lieu durant la période de référence
+        const periodeDebut = indexEgalite.metadata.periodeReference.debut;
+        const periodeFin = indexEgalite.metadata.periodeReference.fin;
+        
+        for (const promo of salarie.analytics.indexEgalite.promotion.historique) {
+          const datePromotion = new Date(promo.date);
+          
+          if (datePromotion >= periodeDebut && datePromotion <= periodeFin) {
+            aReçuPromotion = true;
+            break;
+          }
+        }
+      }
+      
+      // Incrémenter les compteurs selon le sexe
+      if (salarie.identite.sexe === "01") { // Homme
+        hommesTotal++;
+        if (aReçuPromotion) {
+          hommesPromus++;
+        }
+      } else if (salarie.identite.sexe === "02") { // Femme
+        femmesTotal++;
+        if (aReçuPromotion) {
+          femmesPromues++;
+        }
+      }
+    }
+    
+    // Vérifier si l'indicateur est calculable
+    if (hommesTotal < 10 || femmesTotal < 10) {
+      indexEgalite.indicateur3.nonCalculable = true;
+      indexEgalite.indicateur3.motifNonCalculable = "Effectifs insuffisants";
+    } else {
+      // Calculer les taux de promotion
+      const tauxHommes = (hommesPromus / hommesTotal) * 100;
+      const tauxFemmes = (femmesPromues / femmesTotal) * 100;
+      
+      // Calculer l'écart de taux de promotion en points de pourcentage
+      const ecartTaux = tauxHommes - tauxFemmes;
+      
+      // Calculer le score sur 15 points
+      let score = 15;
+      
+      // Si l'écart est en défaveur des femmes
+      if (ecartTaux > 0) {
+        // Selon la formule: 15 - (écart * 5)
+        score = 15 - (ecartTaux * 5);
+        
+        // Si le score est négatif, on le met à 0
+        score = Math.max(0, Math.round(score));
+      }
+      
+      // Mettre à jour l'indicateur
+      indexEgalite.indicateur3.nombreHommes = hommesTotal;
+      indexEgalite.indicateur3.nombreFemmes = femmesTotal;
+      indexEgalite.indicateur3.nombrePromusHommes = hommesPromus;
+      indexEgalite.indicateur3.nombrePromuesFemmes = femmesPromues;
+      indexEgalite.indicateur3.tauxPromotionHommes = tauxHommes;
+      indexEgalite.indicateur3.tauxPromotionFemmes = tauxFemmes;
+      indexEgalite.indicateur3.ecartTauxPromotion = ecartTaux;
+      indexEgalite.indicateur3.score = score;
+    }
+  }
+  
+  /**
+   * Calcule l'indicateur 4: Retour de congé maternité (15 points)
+   * @private
+   * @param {object} indexEgalite - Modèle d'Index d'Égalité
+   * @param {object} allSalaries - Map des salariés
+   * @param {object} allContrats - Map des contrats
+   */
+  function _calculerIndicateur4_RetourCongeMaternite(indexEgalite, allSalaries, allContrats) {
+    // Compter les femmes revenant de congé maternité et celles ayant reçu une augmentation
+    let totalRetourMaternite = 0;
+    let totalAugmentees = 0;
+    
+    // Parcourir tous les salariés (uniquement les femmes)
+    for (const nir in allSalaries) {
+      const salarie = allSalaries[nir];
+      
+      // Ne considérer que les femmes
+      if (salarie.identite.sexe !== "02") continue;
+      
+      // Parcourir les arrêts et identifier les congés maternité avec retour pendant la période
+      for (const arret of salarie.arrets) {
+        if (arret.suiviEgalite.estCongeMaternite && arret.dateReprise) {
+          const dateReprise = new Date(arret.dateReprise);
+          
+          // Vérifier si la reprise a eu lieu pendant la période de référence
+          if (dateReprise >= indexEgalite.metadata.periodeReference.debut && 
+              dateReprise <= indexEgalite.metadata.periodeReference.fin) {
+            
+            totalRetourMaternite++;
+            
+            // Vérifier si elle a reçu une augmentation à son retour
+            if (arret.suiviEgalite.augmentationAuRetour) {
+              totalAugmentees++;
+            }
+          }
+        }
+      }
+    }
+    
+    // Vérifier si l'indicateur est calculable
+    if (totalRetourMaternite === 0) {
+      indexEgalite.indicateur4.nonCalculable = true;
+      indexEgalite.indicateur4.motifNonCalculable = "Aucun retour de congé maternité";
+    } else {
+      // Calculer le taux de respect
+      const tauxRespect = (totalAugmentees / totalRetourMaternite) * 100;
+      
+      // Le score est de 15 points si 100% des retours ont été augmentés, 0 sinon
+      const score = tauxRespect === 100 ? 15 : 0;
+      
+      // Mettre à jour l'indicateur
+      indexEgalite.indicateur4.nombreRetourCongeMaternite = totalRetourMaternite;
+      indexEgalite.indicateur4.nombreAugmentees = totalAugmentees;
+      indexEgalite.indicateur4.tauxRespect = tauxRespect;
+      indexEgalite.indicateur4.score = score;
+    }
+  }
+  
+  /**
+   * Calcule l'indicateur 5: Nombre de femmes dans les 10 plus hautes rémunérations (10 points)
+   * @private
+   * @param {object} indexEgalite - Modèle d'Index d'Égalité
+   * @param {object} allSalaries - Map des salariés
+   * @param {object} allContrats - Map des contrats
+   */
+  function _calculerIndicateur5_PlusHautesRemunerations(indexEgalite, allSalaries, allContrats) {
+    // Calculer la rémunération totale pour chaque salarié
+    const salariesRemunerations = [];
+    
+    for (const nir in allSalaries) {
+      const salarie = allSalaries[nir];
+      let remunerationTotale = 0;
+      
+      // Calculer la rémunération totale du salarié (tous contrats)
+      for (const numContrat of salarie.contrats) {
+        const contratKey = Object.keys(allContrats).find(k => k.includes(numContrat));
+        if (contratKey) {
+          const contrat = allContrats[contratKey];
+          if (contrat && contrat.remunerations.length > 0) {
+            // Utiliser la dernière rémunération connue pour chaque contrat
+            const remusPrincipales = contrat.remunerations.filter(r => 
+              r.type === "001" || r.type === "002" || r.type === "003"
+            ).sort((a, b) => b.periode.debut - a.periode.debut);
+            
+            if (remusPrincipales.length > 0) {
+              remunerationTotale += remusPrincipales[0].montant || 0;
+            }
+          }
+        }
+      }
+      
+      if (remunerationTotale > 0) {
+        salariesRemunerations.push({
+          nir: nir,
+          sexe: salarie.identite.sexe,
+          remuneration: remunerationTotale
+        });
+      }
+    }
+    
+    // Vérifier si l'indicateur est calculable
+    if (salariesRemunerations.length < 10) {
+      indexEgalite.indicateur5.nonCalculable = true;
+      indexEgalite.indicateur5.motifNonCalculable = "Effectif inférieur à 10 salariés";
+    } else {
+      // Trier par rémunération décroissante
+      salariesRemunerations.sort((a, b) => b.remuneration - a.remuneration);
+      
+      // Prendre les 10 plus hautes rémunérations
+      const topRemunerations = salariesRemunerations.slice(0, 10);
+      
+      // Compter le nombre de femmes et d'hommes
+      let nombreFemmes = 0;
+      let nombreHommes = 0;
+      
+      topRemunerations.forEach(top => {
+        if (top.sexe === "01") { // Homme
+          nombreHommes++;
+        } else if (top.sexe === "02") { // Femme
+          nombreFemmes++;
+        }
+      });
+      
+      // Calculer le score selon le nombre de femmes
+      let score = 0;
+      
+      switch (nombreFemmes) {
+        case 0:
+        case 1: score = 0; break;
+        case 2: score = 5; break;
+        case 3: score = 5; break;
+        case 4: score = 10; break;
+        default: score = 10; break;
+      }
+      
+      // Mettre à jour l'indicateur
+      indexEgalite.indicateur5.nombreFemmesPlusHautesRemunerations = nombreFemmes;
+      indexEgalite.indicateur5.nombreHommesPlusHautesRemunerations = nombreHommes;
+      indexEgalite.indicateur5.score = score;
+    }
+  }
+  
+  /**
+   * Calcule le résultat global de l'Index d'Égalité Professionnelle
+   * @private
+   * @param {object} indexEgalite - Modèle d'Index d'Égalité
+   */
+  function _calculerResultatGlobalIndexEgalite(indexEgalite) {
+    // Compter le nombre d'indicateurs calculables
+    let indicateursCalculables = 0;
+    let scoreTotal = 0;
+    let scoreCalculable = 0;
+    
+    // Indicateur 1
+    if (!indexEgalite.indicateur1.nonCalculable) {
+      indicateursCalculables++;
+      scoreTotal += indexEgalite.indicateur1.score;
+      scoreCalculable += 40;
+    }
+    
+    // Indicateur 2
+    if (!indexEgalite.indicateur2.nonCalculable) {
+      indicateursCalculables++;
+      scoreTotal += indexEgalite.indicateur2.score;
+      scoreCalculable += 20;
+    }
+    
+    // Indicateur 3
+    if (!indexEgalite.indicateur3.nonCalculable) {
+      indicateursCalculables++;
+      scoreTotal += indexEgalite.indicateur3.score;
+      scoreCalculable += 15;
+    }
+    
+    // Indicateur 4
+    if (!indexEgalite.indicateur4.nonCalculable) {
+      indicateursCalculables++;
+      scoreTotal += indexEgalite.indicateur4.score;
+      scoreCalculable += 15;
+    }
+    
+    // Indicateur 5
+    if (!indexEgalite.indicateur5.nonCalculable) {
+      indicateursCalculables++;
+      scoreTotal += indexEgalite.indicateur5.score;
+      scoreCalculable += 10;
+    }
+    
+    // Mettre à jour le résultat
+    indexEgalite.resultat.indicateurCalculables = indicateursCalculables;
+    indexEgalite.resultat.totalCalculable = scoreCalculable;
+    
+    // Vérifier si l'index est calculable (au moins 75 points calculables)
+    if (scoreCalculable >= 75) {
+      indexEgalite.resultat.total = scoreTotal;
+      indexEgalite.resultat.publication.date = new Date();
+    } else {
+      indexEgalite.resultat.total = null;
+      indexEgalite.resultat.publication.methodologie = "Index non calculable (moins de 75 points calculables)";
+    }
   }
   
   // ===== Fonctions utilitaires privées =====
@@ -998,7 +1752,19 @@ const DSNAnalysisService = (function() {
    */
   function _calculateDaysDifference(startDate, endDate) {
     const diffTime = Math.abs(endDate - startDate);
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 pour inclure le jour de début
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  }
+  
+  /**
+   * Calcule le nombre de mois entre deux dates
+   * @private
+   * @param {Date} startDate - Date de début
+   * @param {Date} endDate - Date de fin
+   * @return {number} - Nombre de mois
+   */
+  function _calculateMonthsDifference(startDate, endDate) {
+    return (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
+           (endDate.getMonth() - startDate.getMonth());
   }
   
   /**
@@ -1101,6 +1867,8 @@ const DSNAnalysisService = (function() {
     searchSalaries,
     searchContrats,
     analyzeSalaryEvolution,
-    analyzeAbsences
+    analyzeAbsences,
+    generateEqualityIndexReport,  // NOUVEAUTÉ: Export du rapport d'égalité professionnelle
+    analyzeEqualityIndex          // NOUVEAUTÉ: Analyse spécifique à l'index d'égalité
   };
 })();
